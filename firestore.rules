@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidJobApplication(data) {
+      return data.userId is string && data.userId.size() <= 50 &&
+             data.jobId is string && data.jobId.size() <= 50 &&
+             (data.status == 'Submitted' || data.status == 'In Review' || data.status == 'Interviewing') &&
+             data.appliedAt is string && data.appliedAt.size() <= 50;
+    }
+
+    // Videos
+    match /videos/{videoId} {
+      allow read, write: if true;
+    }
+
+    // Creators
+    match /creators/{creatorId} {
+      allow read, write: if true;
+    }
+
+    // Comments
+    match /comments/{commentId} {
+      allow read, write: if true;
+    }
+
+    // Hero Items
+    match /hero_items/{heroItemId} {
+      allow read, write: if true;
+    }
+
+    // Campaigns
+    match /campaigns/{campaignId} {
+      allow read, write: if true;
+    }
+
+    // Donations
+    match /donations/{donationId} {
+      allow read, write: if true;
+    }
+
+    // Jobs
+    match /jobs/{jobId} {
+      allow read, write: if true;
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Footer Settings
+    match /footer_settings/{id} {
+      allow read, write: if true;
+    }
+
+    // Terms & Conditions Settings
+    match /terms_settings/{id} {
+      allow read, write: if true;
+    }
+
+    // Watch History
+    match /watch_history/{historyId} {
+      allow read, write: if true;
+    }
+
+    // Job Applications
+    match /job_applications/{applicationId} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "Video": {
+      "title": "Video",
+      "description": "A video or live stream story uploaded by a creator.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "channel": { "type": "string", "maxLength": 50 },
+        "creatorId": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 500 },
+        "viewsCount": { "type": "number" },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "duration": { "type": "string", "maxLength": 20 },
+        "durationSeconds": { "type": "number" },
+        "thumbnailGradient": { "type": "string", "maxLength": 100 },
+        "likes": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "isLive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "creatorId", "category"]
+    },
+    "Creator": {
+      "title": "Creator",
+      "description": "A user who creates content on the platform.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 50 },
+        "initials": { "type": "string", "maxLength": 5 },
+        "avatarGradient": { "type": "string", "maxLength": 100 },
+        "subscribers": { "type": "string", "maxLength": 20 },
+        "videosCount": { "type": "number" },
+        "featuredTopic": { "type": "string", "maxLength": 100 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment left on a video.",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string", "maxLength": 100 },
+        "author": { "type": "string", "maxLength": 50 },
+        "authorInitials": { "type": "string", "maxLength": 5 },
+        "avatarGradient": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["videoId", "author", "text"]
+    },
+    "FooterSettings": {
+      "title": "FooterSettings",
+      "description": "Customizable footer links and copyright settings.",
+      "type": "object",
+      "properties": {
+        "copyrightText": { "type": "string", "maxLength": 200 },
+        "tagline": { "type": "string", "maxLength": 200 },
+        "links": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["copyrightText"]
+    },
+    "TermsSettings": {
+      "title": "TermsSettings",
+      "description": "Customizable terms and conditions content and sections.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "subtitle": { "type": "string", "maxLength": 300 },
+        "version": { "type": "string", "maxLength": 50 },
+        "lastUpdated": { "type": "string", "maxLength": 100 },
+        "executiveSummary": { "type": "string", "maxLength": 2000 },
+        "jurisdiction": { "type": "string", "maxLength": 100 },
+        "legalEmail": { "type": "string", "maxLength": 100 },
+        "supportEmail": { "type": "string", "maxLength": 100 },
+        "sections": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "version"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "A financial donation made to a community support campaign.",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string" },
+        "campaignTitle": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "donorName": { "type": "string" },
+        "donorEmail": { "type": "string" },
+        "donorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["campaignId", "amount", "donorName"]
+    },
+    "WatchHistory": {
+      "title": "WatchHistory",
+      "description": "Tracks videos watched by a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 50 },
+        "videoId": { "type": "string", "maxLength": 50 },
+        "watchedAt": { "type": "string", "format": "date-time" },
+        "playbackTimestamp": { "type": "number" }
+      },
+      "required": ["userId", "videoId", "watchedAt"]
+    },
+    "JobApplication": {
+      "title": "JobApplication",
+      "description": "Tracks job applications.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 50 },
+        "jobId": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["Submitted", "In Review", "Interviewing"] },
+        "appliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "jobId", "status", "appliedAt"]
+    }
+  },
+  "firestore": {
+    "/videos/{videoId}": {
+      "schema": { "$ref": "#/entities/Video" },
+      "description": "Stores all video uploads and live streams."
+    },
+    "/donations/{donationId}": {
+      "schema": { "$ref": "#/entities/Donation" },
+      "description": "Stores community campaign donations."
+    },
+    "/creators/{creatorId}": {
+      "schema": { "$ref": "#/entities/Creator" },
+      "description": "Stores creator profile information."
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Stores comments on videos."
+    },
+    "/footer_settings/{id}": {
+      "schema": { "$ref": "#/entities/FooterSettings" },
+      "description": "Stores site-wide footer links and configuration."
+    },
+    "/terms_settings/{id}": {
+      "schema": { "$ref": "#/entities/TermsSettings" },
+      "description": "Stores site-wide terms and conditions content."
+    },
+    "/watch_history/{historyId}": {
+      "schema": { "$ref": "#/entities/WatchHistory" },
+      "description": "Stores watch history per user."
+    },
+    "/job_applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/JobApplication" },
+      "description": "Stores job applications per user."
+    }
+  }
+}

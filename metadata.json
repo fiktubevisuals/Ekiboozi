@@ -1,0 +1,6 @@
+{
+  "name": "Ekiboozi",
+  "description": "Every story has a stage — The video platform for trending stories, authentic creators, and live streams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
