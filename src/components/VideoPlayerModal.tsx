@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AdBanner } from './AdBanner';
+import { useImaAds } from '../hooks/useImaAds';
+import { ImaAdOverlay } from './ImaAdOverlay';
+import { VideoAdsManager } from './VideoAdsManager';
+import { calculateMidrollCuepoints } from '../utils/imaConstants';
 import { Video, Creator, Comment } from '../types';
 import { ShareModal } from './ShareModal';
 import { formatPublishDate, formatRelativeTime, formatViewCount } from '../utils/dateUtils';
@@ -101,6 +105,75 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const isDraggingRef = React.useRef(false);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const adContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Compute mid-roll cue points based on video duration
+  const midrollCuepoints = useMemo(() => {
+    return calculateMidrollCuepoints(video?.durationSeconds || 60);
+  }, [video?.durationSeconds]);
+
+  // Initialize Google IMA In-Video Ads Hook
+  const {
+    adState,
+    requestAds,
+    startSimulatedAd,
+    skipAd,
+    checkMidroll,
+    resetPlayedCuepoints,
+  } = useImaAds({
+    videoElement: videoRef.current,
+    adContainerElement: adContainerRef.current,
+    enablePreroll: !video?.isLive,
+    enableMidroll: !video?.isLive,
+    midrollCuepoints,
+    onContentPauseRequested: () => {
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+    },
+    onContentResumeRequested: () => {
+      if (videoRef.current && isPlaying) {
+        videoRef.current.play().catch((err) => console.log('Resume play prevented:', err));
+      }
+    },
+  });
+
+  // Reset cue points when switching videos
+  useEffect(() => {
+    resetPlayedCuepoints();
+  }, [video?.id, resetPlayedCuepoints]);
+
+  // VideoAdsManager instance - handles container initialization & ad lifecycle cleanup
+  const videoAdsManagerRef = useRef<VideoAdsManager | null>(null);
+
+  // Initialize VideoAdsManager on modal mount and clean up resources when modal unmounts / closes
+  useEffect(() => {
+    if (adContainerRef.current && videoRef.current) {
+      videoAdsManagerRef.current = new VideoAdsManager({
+        containerElement: adContainerRef.current,
+        videoElement: videoRef.current,
+        callbacks: {
+          onContentPauseRequested: () => {
+            if (videoRef.current) videoRef.current.pause();
+          },
+          onContentResumeRequested: () => {
+            if (videoRef.current && isPlaying) {
+              videoRef.current.play().catch((err) => console.log('Ad resume prevented:', err));
+            }
+          },
+        },
+      });
+
+      videoAdsManagerRef.current.initialize();
+    }
+
+    return () => {
+      if (videoAdsManagerRef.current) {
+        videoAdsManagerRef.current.destroy();
+        videoAdsManagerRef.current = null;
+      }
+    };
+  }, [video?.id]);
 
   // Sync active video ID with URL query params for easy sharing
   useEffect(() => {
@@ -410,6 +483,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   setCurrentPlaybackSeconds(currentTime);
                   const pct = (currentTime / duration) * 100;
                   if (!isNaN(pct)) onProgressChange(pct);
+
+                  // Trigger scheduled mid-roll ads if eligible
+                  checkMidroll(currentTime);
+
                   if (!video.isLive && duration - currentTime <= 5 && duration > 10) {
                     setShowUpNext(true);
                     setCountdown(Math.ceil(duration - currentTime));
@@ -581,6 +658,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 )}
                 {/* Visual Bar with larger touch target */}
                 <div className="w-full h-[4px] sm:h-[3px] group-hover/scrub:h-[6px] bg-white/30 rounded-full transition-all relative">
+                  {/* Mid-roll Cuepoint Markers on Timeline */}
+                  {midrollCuepoints.map((cueSec) => {
+                    const totalDur = videoRef.current?.duration || video.durationSeconds || 1;
+                    const pct = Math.min(100, Math.max(0, (cueSec / totalDur) * 100));
+                    return (
+                      <div
+                        key={`cue-${cueSec}`}
+                        className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#F2B705] ring-2 ring-black/80 pointer-events-none z-10 -ml-1"
+                        style={{ left: `${pct}%` }}
+                        title={`Mid-roll Ad Break at ${formatTime(cueSec)}`}
+                      />
+                    );
+                  })}
+
                   <div 
                     className="absolute inset-y-0 left-0 bg-[#F2B705] rounded-full transition-[width] duration-75" 
                     style={{ width: `${progress}%` }}
@@ -698,6 +789,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Google IMA In-Video Ad Overlay & SDK Mount */}
+            <ImaAdOverlay
+              adContainerRef={adContainerRef}
+              adState={adState}
+              onSkipAd={skipAd}
+              onRequestTestAd={(tagUrl) => requestAds(tagUrl, false)}
+              onTriggerSimulation={(title) => startSimulatedAd(title)}
+              isDevMode={false}
+            />
           </div>
 
           {/* Video Metadata */}

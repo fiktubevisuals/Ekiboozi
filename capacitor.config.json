@@ -1,0 +1,19 @@
+{
+  "appId": "ug.ekiboozi.app",
+  "appName": "Ekiboozi",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#14171A",
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

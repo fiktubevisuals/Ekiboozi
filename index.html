@@ -2,19 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Ekiboozi</title>
     <meta name="description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
+    
+    <!-- Mobile PWA & Theme Color (Android & iOS) -->
+    <meta name="theme-color" content="#14171A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ekiboozi" />
+    <meta name="application-name" content="Ekiboozi" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msapplication-TileColor" content="#14171A" />
+
+    <!-- Favicons & Touch Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/icon.svg" color="#F2B705" />
+
+    <!-- Open Graph & Social Cards -->
     <meta property="og:title" content="Ekiboozi" />
     <meta property="og:description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="/pwa-512x512.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ekiboozi" />
+    <meta name="twitter:description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Google AdSense global script tag (replace client ID in production) -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-0000000000000000" crossorigin="anonymous"></script>
+    <!-- Google Interactive Media Ads (IMA) HTML5 SDK for In-Video Ads -->
+    <script async src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
   </head>
   <body class="bg-[#14171A] text-[#F3F1EA] antialiased min-h-screen">
     <div id="root"></div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { NavView } from '../types';
 import { Search, Plus, X, User } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentView: NavView;
@@ -98,8 +99,10 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Actions (Upload + Profile) */}
+        {/* Actions (Install App + Upload + Profile) */}
         <div className="flex items-center gap-2 sm:gap-3.5 flex-shrink-0">
+          <PWAInstallButton variant="compact" />
+
           {user ? (
             <>
               <button

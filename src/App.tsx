@@ -29,6 +29,7 @@ import { JobDetailsView } from './components/JobDetailsView';
 import { TermsView } from './components/TermsView';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { CookieBanner } from './components/CookieBanner';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
 import { Film } from 'lucide-react';
 import { DEFAULT_FOOTER_SETTINGS, DEFAULT_TERMS_SETTINGS } from './constants/legalDefaults';
@@ -1282,6 +1283,9 @@ export default function App() {
 
       {/* Global Cookie Consent Banner */}
       <CookieBanner />
+
+      {/* Connectivity Status Toast for PWA / Mobile */}
+      <OfflineIndicator />
     </div>
   );
 }
