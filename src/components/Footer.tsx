@@ -37,7 +37,7 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   return (
-    <footer className="mt-16 border-t border-[#333A41] py-10 sm:py-12 px-4 sm:px-8 bg-[#14171A]">
+    <footer className="mt-16 border-t border-[#333A41] pt-10 pb-24 sm:py-12 px-4 sm:px-8 bg-[#14171A]">
       <div className="max-w-[1280px] mx-auto flex justify-between items-center flex-wrap gap-5">
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13.5px] items-center">
           {links.map((link) => {

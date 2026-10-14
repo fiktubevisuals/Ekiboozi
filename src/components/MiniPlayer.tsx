@@ -31,7 +31,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 40, scale: 0.95 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="fixed bottom-4 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-6 z-50 sm:w-[380px] bg-[#14171A] border border-[#333A41] rounded-[16px] shadow-2xl overflow-hidden group/mini"
+      className="fixed bottom-[68px] right-3 left-3 sm:left-auto sm:right-6 sm:bottom-6 z-40 sm:w-[380px] bg-[#14171A] border border-[#333A41] rounded-[16px] shadow-2xl overflow-hidden group/mini"
     >
       {/* Top progress bar */}
       <div className="w-full h-1 bg-[#333A41] relative">

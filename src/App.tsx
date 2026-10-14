@@ -23,6 +23,7 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { UploadModal } from './components/UploadModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { Footer } from './components/Footer';
+import { BottomNav } from './components/BottomNav';
 import { AdminDashboard } from './components/AdminDashboard';
 import { JobsView } from "./components/JobsView";
 import { JobDetailsView } from './components/JobDetailsView';
@@ -1262,6 +1263,15 @@ export default function App() {
         onSelectView={handleSelectView}
         isAdmin={isAdmin}
         onOpenAdminFooterTerms={() => handleSelectView('admin')}
+      />
+
+      {/* Mobile Bottom Navigation Bar */}
+      <BottomNav
+        currentView={currentView}
+        onSelectView={handleSelectView}
+        onOpenUpload={() => setIsUploadOpen(true)}
+        user={user}
+        isAdmin={isAdmin}
       />
 
       {/* Floating Mini-Player */}
