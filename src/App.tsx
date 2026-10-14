@@ -31,8 +31,10 @@ import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { CookieBanner } from './components/CookieBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
-import { Film } from 'lucide-react';
+import { Film, ShieldCheck, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { DEFAULT_FOOTER_SETTINGS, DEFAULT_TERMS_SETTINGS } from './constants/legalDefaults';
+import { verifyAndRecordDonation } from './services/paymentService';
+import { useVideoSeo } from './hooks/useVideoSeo';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('home');
@@ -79,6 +81,51 @@ export default function App() {
   const [isDbReady, setIsDbReady] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const viewedSessionRef = useRef<Set<string>>(new Set());
+
+  // Global Payment Verification Modal state
+  const [paymentNotice, setPaymentNotice] = useState<{
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
+
+  // Global payment callback handler (e.g. from Pesapal redirects)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trackingId = params.get('OrderTrackingId') || params.get('order_tracking_id');
+    if (trackingId) {
+      // Clean query string immediately so refresh doesn't re-trigger
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      (async () => {
+        try {
+          const res = await verifyAndRecordDonation(trackingId);
+          if (res.isCompleted) {
+            setPaymentNotice({
+              type: 'success',
+              title: 'Payment Completed & Recorded!',
+              message: res.amount 
+                ? `Your contribution of UGX ${new Intl.NumberFormat('en-US').format(res.amount)} has been verified and officially added to the campaign goal.`
+                : 'Your payment was successfully confirmed and recorded.'
+            });
+          } else {
+            setPaymentNotice({
+              type: 'error',
+              title: 'Payment Not Completed',
+              message: `Payment status: "${res.status || 'Pending'}". Uncompleted payments are strictly never recorded to prevent false public totals.`
+            });
+          }
+        } catch (err: any) {
+          console.warn('Payment verification error:', err);
+          setPaymentNotice({
+            type: 'error',
+            title: 'Payment Incomplete',
+            message: 'Payment was not completed. Nothing has been added to the campaign goal.'
+          });
+        }
+      })();
+    }
+  }, []);
 
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged((user) => {
@@ -237,6 +284,9 @@ export default function App() {
 
   // Playback and Mini-Player state
   const [activeVideo, setActiveVideo] = useState<Video | null>(null);
+
+  // Dynamic Open Graph, Twitter Cards, and Schema.org VideoObject JSON-LD for AdSense discoverability
+  useVideoSeo(activeVideo);
   const [isMiniPlayer, setIsMiniPlayer] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [watchHistory, setWatchHistory] = useState<WatchHistory[]>([]);
@@ -1279,6 +1329,44 @@ export default function App() {
             setIsProfileOpen(false);
           }}
         />
+      )}
+
+      {/* Global Payment Result Notification */}
+      {paymentNotice && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#1D2126] border border-[#333A41] rounded-[24px] shadow-2xl p-6 text-center animate-in zoom-in-95 duration-200 relative">
+            <button
+              onClick={() => setPaymentNotice(null)}
+              className="absolute top-4 right-4 text-[#9BA1A8] hover:text-[#F3F1EA] transition-colors p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-4 ${
+              paymentNotice.type === 'success' 
+                ? 'bg-[#1DB954]/20 text-[#1DB954]' 
+                : 'bg-red-500/20 text-red-400'
+            }`}>
+              {paymentNotice.type === 'success' ? (
+                <CheckCircle2 className="w-10 h-10" />
+              ) : (
+                <AlertTriangle className="w-10 h-10" />
+              )}
+            </div>
+
+            <h3 className="text-[20px] font-bold text-[#F3F1EA] mb-2">{paymentNotice.title}</h3>
+            <p className="text-[#9BA1A8] text-[14px] leading-relaxed mb-6">
+              {paymentNotice.message}
+            </p>
+
+            <button
+              onClick={() => setPaymentNotice(null)}
+              className="w-full py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              Understood
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Global Cookie Consent Banner */}

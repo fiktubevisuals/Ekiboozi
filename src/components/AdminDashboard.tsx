@@ -1,11 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Video, Creator, HeroCarouselItem, Campaign, Job, FooterSettings, TermsSettings } from '../types';
-import { Trash2, Users, Film, Activity, AlertTriangle, Edit2, X, Plus, UploadCloud, Image as ImageIcon, HeartHandshake, CheckCircle, Star, Layers } from 'lucide-react';
+import { Trash2, Users, Film, Activity, AlertTriangle, Edit2, X, Plus, UploadCloud, Image as ImageIcon, HeartHandshake, CheckCircle, Star, Layers, RefreshCw, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
 import { db, storage } from '../lib/firebase';
-import { deleteDoc, doc, updateDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, setDoc, addDoc, collection, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { CATEGORIES } from '../constants';
 import { AdminFooterTermsTab } from './AdminFooterTermsTab';
+import { reconcileCampaignTotals, verifyAndRecordDonation } from '../services/paymentService';
 
 interface AdminDashboardProps {
   videos: Video[];
@@ -67,6 +68,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [campaignTarget, setCampaignTarget] = useState('');
   const [campaignFile, setCampaignFile] = useState<File | null>(null);
   const [isSavingCampaign, setIsSavingCampaign] = useState(false);
+
+  // Donations auditing state
+  const [donations, setDonations] = useState<any[]>([]);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
+  const [verifyingTrackingId, setVerifyingTrackingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'donations'), (snap) => {
+      const list: any[] = [];
+      snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setDonations(list);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleReconcileCampaigns = async () => {
+    try {
+      setIsReconciling(true);
+      const res = await reconcileCampaignTotals();
+      setReconcileMessage(res.message);
+      setTimeout(() => setReconcileMessage(null), 6000);
+    } catch (err: any) {
+      alert(`Reconciliation error: ${err.message}`);
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const handleVerifyDonationStatus = async (trackingId: string, donationId: string) => {
+    try {
+      setVerifyingTrackingId(trackingId);
+      const res = await verifyAndRecordDonation(trackingId, donationId);
+      if (res.isCompleted) {
+        alert('Payment confirmed completed by Pesapal! The campaign progress bar has been officially credited.');
+      } else {
+        alert(`Pesapal reported status: "${res.status}". Not completed yet. No campaign totals were changed.`);
+      }
+    } catch (err: any) {
+      alert(`Verification error: ${err.message}`);
+    } finally {
+      setVerifyingTrackingId(null);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -802,12 +848,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {activeTab === 'campaigns' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-[#F3F1EA] font-semibold">Fundraising Campaigns</h2>
-                <button onClick={() => openCampaignModal()} className="flex items-center gap-2 bg-[#F2B705] text-[#14171A] px-4 py-2 rounded-full font-semibold hover:brightness-110 transition-all">
-                  <Plus className="w-4 h-4" /> Add Campaign
-                </button>
+              <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                <div>
+                  <h2 className="text-[#F3F1EA] font-semibold text-lg">Fundraising Campaigns</h2>
+                  <p className="text-[#9BA1A8] text-xs mt-0.5">Public totals strictly reflect 100% verified completed payments.</p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button 
+                    onClick={handleReconcileCampaigns} 
+                    disabled={isReconciling}
+                    className="flex items-center gap-2 bg-[#1D2126] hover:bg-[#262C33] text-[#F3F1EA] border border-[#333A41] hover:border-[#F2B705] px-4 py-2 rounded-full font-semibold text-sm transition-all cursor-pointer disabled:opacity-50"
+                    title="Audit and recalculate all campaign totals strictly from verified completed payments"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin text-[#F2B705]' : 'text-[#F2B705]'}`} />
+                    <span>{isReconciling ? 'Auditing & Reconciling...' : 'Reconcile Verified Totals'}</span>
+                  </button>
+                  <button onClick={() => openCampaignModal()} className="flex items-center gap-2 bg-[#F2B705] text-[#14171A] px-4 py-2 rounded-full font-semibold hover:brightness-110 transition-all cursor-pointer text-sm">
+                    <Plus className="w-4 h-4" /> Add Campaign
+                  </button>
+                </div>
               </div>
+
+              {reconcileMessage && (
+                <div className="bg-[#1DB954]/15 border border-[#1DB954]/30 text-green-300 px-4 py-3 rounded-xl text-sm flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-[#1DB954]" />
+                  <span>{reconcileMessage}</span>
+                </div>
+              )}
               
               <div className="grid grid-cols-1 gap-6">
                 {campaigns.length === 0 ? (
@@ -916,6 +983,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   ))
                 )}
+              </div>
+
+              {/* Payment Transactions & Audit Section */}
+              <div className="mt-10 pt-8 border-t border-[#333A41]">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-[#F3F1EA] flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-[#1DB954]" />
+                      Donations & Payment Audit Log
+                    </h3>
+                    <p className="text-xs text-[#9BA1A8]">
+                      All payment attempts across the platform. Only &quot;Completed&quot; status increments public raised totals.
+                    </p>
+                  </div>
+                  <span className="text-xs px-3 py-1 bg-[#14171A] border border-[#333A41] rounded-full text-[#9BA1A8]">
+                    {donations.filter(d => d.status === 'completed').length} completed / {donations.length} total recorded
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto bg-[#14171A] border border-[#333A41] rounded-[20px]">
+                  <table className="w-full text-left text-sm text-[#F3F1EA]">
+                    <thead className="bg-[#1D2126] text-[#9BA1A8] text-xs uppercase border-b border-[#333A41]">
+                      <tr>
+                        <th className="px-5 py-3.5">Date</th>
+                        <th className="px-5 py-3.5">Purpose / Campaign</th>
+                        <th className="px-5 py-3.5">Donor</th>
+                        <th className="px-5 py-3.5">Amount (UGX)</th>
+                        <th className="px-5 py-3.5">Status</th>
+                        <th className="px-5 py-3.5">Pesapal Reference</th>
+                        <th className="px-5 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#333A41]/50">
+                      {donations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-5 py-8 text-center text-[#9BA1A8]">
+                            No payment transactions recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        donations.map((d) => (
+                          <tr key={d.id} className="hover:bg-[#1D2126]/40 transition-colors">
+                            <td className="px-5 py-3.5 text-xs text-[#9BA1A8] whitespace-nowrap">
+                              {d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="px-5 py-3.5 font-medium max-w-[200px] truncate">
+                              {d.campaignTitle || d.videoTitle || (d.type === 'super_thanks' ? 'Super Thanks' : 'General Support')}
+                            </td>
+                            <td className="px-5 py-3.5 text-xs text-[#9BA1A8]">
+                              {d.donorName || 'Anonymous'}
+                            </td>
+                            <td className="px-5 py-3.5 font-bold text-[#F2B705] whitespace-nowrap">
+                              UGX {Number(d.amount || 0).toLocaleString()}
+                            </td>
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              {d.status === 'completed' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-500/15 text-green-400 border border-green-500/30">
+                                  <CheckCircle2 className="w-3 h-3" /> Completed
+                                </span>
+                              ) : d.status === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
+                                  <Clock className="w-3 h-3" /> Pending
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
+                                  <AlertTriangle className="w-3 h-3" /> Failed
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-[#9BA1A8] truncate max-w-[150px]">
+                              {d.orderTrackingId || d.reference || '—'}
+                            </td>
+                            <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                              {d.status !== 'completed' && d.orderTrackingId ? (
+                                <button
+                                  onClick={() => handleVerifyDonationStatus(d.orderTrackingId, d.id)}
+                                  disabled={verifyingTrackingId === d.orderTrackingId}
+                                  className="px-3 py-1 rounded-lg text-xs bg-[#333A41] hover:bg-[#434A51] text-[#F3F1EA] transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${verifyingTrackingId === d.orderTrackingId ? 'animate-spin text-[#F2B705]' : ''}`} />
+                                  Verify Status
+                                </button>
+                              ) : d.status === 'completed' ? (
+                                <span className="text-xs text-[#9BA1A8]">Credited</span>
+                              ) : (
+                                <span className="text-xs text-[#656C73]">Not started</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

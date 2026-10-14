@@ -7,6 +7,9 @@ import { calculateMidrollCuepoints } from '../utils/imaConstants';
 import { Video, Creator, Comment } from '../types';
 import { ShareModal } from './ShareModal';
 import { formatPublishDate, formatRelativeTime, formatViewCount } from '../utils/dateUtils';
+import { useVideoSeo } from '../hooks/useVideoSeo';
+import { db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import {
   X,
   Play,
@@ -28,7 +31,12 @@ import {
   RotateCcw,
   RotateCw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ExternalLink,
+  RefreshCw,
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface VideoPlayerModalProps {
@@ -91,6 +99,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     { id: 'platinum', label: 'Platinum Fan', price: '2,000,000 UGX', amount: 2000000, icon: '💎' },
     { id: 'executive', label: 'Exec Producer', price: '5,000,000 UGX', amount: 5000000, icon: '👑' },
   ];
+
+  // Synchronize dynamic Open Graph meta tags and Schema.org VideoObject JSON-LD for AdSense discoverability
+  useVideoSeo(video);
 
   // Player enhancements state
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -384,33 +395,145 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   const [isProcessingTip, setIsProcessingTip] = useState(false);
+  const [isVerifyingTip, setIsVerifyingTip] = useState(false);
+  const [pendingTip, setPendingTip] = useState<{
+    redirectUrl: string;
+    orderTrackingId: string;
+    reference: string;
+    amount: number;
+    label: string;
+    icon: string;
+  } | null>(null);
+  const [tipNotice, setTipNotice] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
 
+  // Initiates real Pesapal checkout for tip/Super Thanks
   const handleSendTip = async (amount: number, label: string, icon: string) => {
+    if (isNaN(amount) || amount < 1000) {
+      setTipNotice({ type: 'error', text: 'Minimum tip amount is 1,000 UGX.' });
+      return;
+    }
+
     try {
       setIsProcessingTip(true);
-      
-      // MOCK: Simulate network delay for a real feel, since we don't have Pesapal keys yet
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      setIsTipMenuOpen(false);
+      setTipNotice(null);
+
+      const cleanRef = `TIP-${video.id.substring(0, 6)}-${Date.now()}`;
+      const response = await fetch('/api/pesapal/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          description: `Super Thanks: ${video.title.slice(0, 50)}`,
+          reference: cleanRef
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.redirect_url) {
+        setTipNotice({
+          type: 'error',
+          text: data.error || 'Payment gateway connection failed. No payment was charged and no tip was sent.'
+        });
+        return;
+      }
+
+      setPendingTip({
+        redirectUrl: data.redirect_url,
+        orderTrackingId: data.order_tracking_id,
+        reference: cleanRef,
+        amount,
+        label,
+        icon
+      });
+
+      setTipNotice({
+        type: 'info',
+        text: 'Pesapal payment page opened. Please complete your payment, then click "Verify Tip Payment" below. Uncompleted attempts are never recorded.'
+      });
+
+      // Open payment gateway
+      window.open(data.redirect_url, '_blank');
       setCustomTipAmount('');
-      
-      const formattedPrice = new Intl.NumberFormat('en-US').format(amount) + ' UGX';
-      onAddComment(video.id, `Sent a ${label} ${icon} - ${formattedPrice}`);
-      
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Payment error', error);
-      alert('Could not initiate payment. Please try again.');
+      setTipNotice({
+        type: 'error',
+        text: error?.message || 'Could not initiate payment. No tip has been recorded.'
+      });
     } finally {
       setIsProcessingTip(false);
     }
   };
 
+  const handleVerifyTip = async () => {
+    if (!pendingTip) return;
+
+    try {
+      setIsVerifyingTip(true);
+      const res = await fetch(`/api/pesapal/status?order_tracking_id=${encodeURIComponent(pendingTip.orderTrackingId)}`);
+      const statusData = await res.json();
+
+      if (statusData.isCompleted) {
+        // ONLY NOW post the public Super Thanks comment!
+        const formattedPrice = new Intl.NumberFormat('en-US').format(pendingTip.amount) + ' UGX';
+        onAddComment(video.id, `Sent a ${pendingTip.label} ${pendingTip.icon} - ${formattedPrice}`);
+
+        // Record completed tip
+        try {
+          await addDoc(collection(db, 'donations'), {
+            type: 'super_thanks',
+            videoId: video.id,
+            videoTitle: video.title,
+            amount: pendingTip.amount,
+            currency: 'UGX',
+            donorName: 'Viewer Supporter',
+            status: 'completed',
+            orderTrackingId: pendingTip.orderTrackingId,
+            reference: pendingTip.reference,
+            createdAt: new Date().toISOString(),
+            timestamp: serverTimestamp()
+          });
+        } catch {
+          // non-critical
+        }
+
+        setTipNotice({
+          type: 'success',
+          text: `Payment confirmed! Your Super Thanks (${formattedPrice}) has been officially posted.`
+        });
+        setPendingTip(null);
+      } else {
+        setTipNotice({
+          type: 'error',
+          text: `Pesapal status: "${statusData.verifiedStatus || statusData.payment_status_description || 'Pending'}". You must finish payment in Pesapal before the tip is recorded.`
+        });
+      }
+    } catch (err: any) {
+      setTipNotice({
+        type: 'error',
+        text: err.message || 'Unable to verify payment status with Pesapal.'
+      });
+    } finally {
+      setIsVerifyingTip(false);
+    }
+  };
+
   const handleSendCustomTip = () => {
     const amount = parseFloat(customTipAmount.replace(/,/g, ''));
-    if (!isNaN(amount) && amount > 0) {
+    if (!isNaN(amount) && amount >= 1000) {
       handleSendTip(amount, 'Custom Gift', '🎁');
+    } else {
+      setTipNotice({ type: 'error', text: 'Please enter a valid amount of at least 1,000 UGX.' });
     }
+  };
+
+  const handleCloseTipMenu = () => {
+    setIsTipMenuOpen(false);
+    setPendingTip(null);
+    setTipNotice(null);
+    setCustomTipAmount('');
   };
 
   const relatedVideos = allVideos
@@ -882,58 +1005,139 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   {isTipMenuOpen && (
                     <div 
                       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-                      onClick={() => setIsTipMenuOpen(false)}
+                      onClick={handleCloseTipMenu}
                     >
                       <div 
                         className="w-full max-w-[420px] bg-[#272727] rounded-2xl shadow-2xl flex flex-col max-h-[85vh] border border-[#3F3F3F] animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="px-5 py-4 border-b border-[#3F3F3F] flex items-center justify-between">
-                          <span className="text-[18px] font-bold text-[#F1F1F1]">Send Super Thanks</span>
+                          <span className="text-[18px] font-bold text-[#F1F1F1] flex items-center gap-2">
+                            <Gift className="w-5 h-5 text-[#F2B705]" /> Send Super Thanks
+                          </span>
                           <button 
-                            onClick={() => setIsTipMenuOpen(false)} 
-                            className="p-2 -mr-2 hover:bg-[#3F3F3F] rounded-full transition-colors text-[#F1F1F1]"
+                            onClick={handleCloseTipMenu} 
+                            className="p-2 -mr-2 hover:bg-[#3F3F3F] rounded-full transition-colors text-[#F1F1F1] cursor-pointer"
                           >
                             <X className="w-5 h-5" />
                           </button>
                         </div>
-                        <div className="overflow-y-auto flex-1 p-5 custom-scrollbar">
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {TIP_OPTIONS.map((tip) => (
-                              <button
-                                key={tip.id}
-                                type="button"
-                                disabled={isProcessingTip}
-                                onClick={() => handleSendTip(tip.amount, tip.label, tip.icon)}
-                                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${isProcessingTip ? 'opacity-50 cursor-not-allowed border-[#3F3F3F] bg-transparent' : 'border-[#3F3F3F] hover:bg-[#3F3F3F] hover:border-[#F1F1F1]/30 cursor-pointer'}`}
-                              >
-                                <span className="text-[28px] mb-2">{tip.icon}</span>
-                                <span className="text-[13px] font-medium text-[#F1F1F1] text-center mb-1">{tip.label}</span>
-                                <span className="text-[12px] text-[#AAAAAA] w-full text-center truncate">
-                                  {isProcessingTip ? '...' : tip.price}
-                                </span>
-                              </button>
-                            ))}
+
+                        {tipNotice && (
+                          <div className={`px-5 py-3 border-b text-[13px] flex items-start gap-2.5 leading-snug ${
+                            tipNotice.type === 'success'
+                              ? 'bg-green-500/15 border-green-500/30 text-green-300'
+                              : tipNotice.type === 'error'
+                              ? 'bg-red-500/15 border-red-500/30 text-red-300'
+                              : 'bg-[#F2B705]/15 border-[#F2B705]/30 text-[#F2B705]'
+                          }`}>
+                            {tipNotice.type === 'success' ? (
+                              <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-green-400" />
+                            ) : tipNotice.type === 'error' ? (
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+                            ) : (
+                              <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-[#F2B705]" />
+                            )}
+                            <span>{tipNotice.text}</span>
                           </div>
-                        </div>
-                        <div className="px-5 py-4 border-t border-[#3F3F3F] bg-[#121212]/50 flex items-center gap-3">
-                          <input
-                            type="number"
-                            placeholder="Custom UGX..."
-                            value={customTipAmount}
-                            onChange={(e) => setCustomTipAmount(e.target.value)}
-                            disabled={isProcessingTip}
-                            className="flex-1 min-w-0 bg-[#0F0F0F] border border-[#3F3F3F] rounded-xl px-4 py-3 text-[14px] text-[#F1F1F1] outline-none focus:border-[#3EA6FF] transition-colors"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSendCustomTip}
-                            disabled={!customTipAmount || isProcessingTip || parseFloat(customTipAmount) <= 0}
-                            className="px-6 py-3 bg-[#3EA6FF] hover:bg-[#3EA6FF]/90 text-[#0F0F0F] text-[15px] font-bold rounded-xl disabled:opacity-50 transition-all cursor-pointer"
-                          >
-                            Send
-                          </button>
-                        </div>
+                        )}
+
+                        {pendingTip ? (
+                          <div className="p-5 space-y-4">
+                            <div className="bg-[#1a1a1a] border border-[#3F3F3F] rounded-xl p-4 text-[13px] space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[#AAAAAA]">Selected Tip:</span>
+                                <span className="font-bold text-[#F1F1F1] flex items-center gap-1.5">
+                                  <span>{pendingTip.icon}</span> {pendingTip.label}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[#AAAAAA]">Amount:</span>
+                                <span className="text-[#F2B705] font-bold text-[15px]">
+                                  {new Intl.NumberFormat('en-US').format(pendingTip.amount)} UGX
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[#AAAAAA]">Reference:</span>
+                                <span className="font-mono text-[11px] text-[#AAAAAA]">{pendingTip.reference}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-start gap-2 text-[12px] text-[#AAAAAA] bg-[#121212]/50 p-3 rounded-lg border border-[#3F3F3F]">
+                              <ShieldCheck className="w-4 h-4 text-[#1DB954] flex-shrink-0 mt-0.5" />
+                              <span>Public comments are only posted once your payment is confirmed completed with Pesapal.</span>
+                            </div>
+
+                            <div className="space-y-2.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => window.open(pendingTip.redirectUrl, '_blank')}
+                                className="w-full py-2.5 bg-[#3F3F3F] hover:bg-[#4F4F4F] text-[#F1F1F1] text-[13px] font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                Re-open Pesapal Payment Page
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={handleVerifyTip}
+                                disabled={isVerifyingTip}
+                                className="w-full py-3 bg-[#3EA6FF] hover:bg-[#3EA6FF]/90 text-[#0F0F0F] text-[14px] font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                              >
+                                <RefreshCw className={`w-4 h-4 ${isVerifyingTip ? 'animate-spin' : ''}`} />
+                                {isVerifyingTip ? 'Verifying with Pesapal...' : 'Verify Tip Payment'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={handleCloseTipMenu}
+                                className="w-full py-2 text-[#AAAAAA] hover:text-[#F1F1F1] text-[13px] transition-colors text-center cursor-pointer"
+                              >
+                                Cancel / Close
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="overflow-y-auto flex-1 p-5 custom-scrollbar">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {TIP_OPTIONS.map((tip) => (
+                                  <button
+                                    key={tip.id}
+                                    type="button"
+                                    disabled={isProcessingTip}
+                                    onClick={() => handleSendTip(tip.amount, tip.label, tip.icon)}
+                                    className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${isProcessingTip ? 'opacity-50 cursor-not-allowed border-[#3F3F3F] bg-transparent' : 'border-[#3F3F3F] hover:bg-[#3F3F3F] hover:border-[#F1F1F1]/30 cursor-pointer'}`}
+                                  >
+                                    <span className="text-[28px] mb-2">{tip.icon}</span>
+                                    <span className="text-[13px] font-medium text-[#F1F1F1] text-center mb-1">{tip.label}</span>
+                                    <span className="text-[12px] text-[#AAAAAA] w-full text-center truncate">
+                                      {isProcessingTip ? '...' : tip.price}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="px-5 py-4 border-t border-[#3F3F3F] bg-[#121212]/50 flex items-center gap-3">
+                              <input
+                                type="number"
+                                placeholder="Custom UGX (min 1,000)..."
+                                value={customTipAmount}
+                                onChange={(e) => setCustomTipAmount(e.target.value)}
+                                disabled={isProcessingTip}
+                                className="flex-1 min-w-0 bg-[#0F0F0F] border border-[#3F3F3F] rounded-xl px-4 py-3 text-[14px] text-[#F1F1F1] outline-none focus:border-[#3EA6FF] transition-colors"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleSendCustomTip}
+                                disabled={!customTipAmount || isProcessingTip || parseFloat(customTipAmount) < 1000}
+                                className="px-6 py-3 bg-[#3EA6FF] hover:bg-[#3EA6FF]/90 text-[#0F0F0F] text-[15px] font-bold rounded-xl disabled:opacity-50 transition-all cursor-pointer"
+                              >
+                                {isProcessingTip ? '...' : 'Pay'}
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}

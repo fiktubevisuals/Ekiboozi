@@ -1,11 +1,28 @@
 import React, { useState } from 'react';
-import { HeartHandshake, Briefcase, ChevronRight, ExternalLink, MapPin, DollarSign, Building2, X, AlertCircle, CheckCircle2, User } from 'lucide-react';
+import { 
+  HeartHandshake, 
+  Briefcase, 
+  ChevronRight, 
+  ExternalLink, 
+  MapPin, 
+  DollarSign, 
+  Building2, 
+  X, 
+  AlertCircle, 
+  CheckCircle2, 
+  User,
+  RefreshCw,
+  ShieldCheck,
+  Clock,
+  AlertTriangle
+} from 'lucide-react';
 
 import { User as FirebaseUser } from 'firebase/auth';
 import { db, storage } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Campaign, Job, Creator } from '../types';
+import { initiateDonationPayment, verifyAndRecordDonation, PesapalOrderResult } from '../services/paymentService';
 
 interface SupportViewProps {
   campaigns: Campaign[];
@@ -23,9 +40,15 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [donationAmount, setDonationAmount] = useState('20000');
   const [donorName, setDonorName] = useState('');
+  const [donorEmail, setDonorEmail] = useState('');
   const [isCustomAmount, setIsCustomAmount] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [donationSuccessMsg, setDonationSuccessMsg] = useState<string | null>(null);
+  
+  // Active Pending Payment State
+  const [pendingPayment, setPendingPayment] = useState<(PesapalOrderResult & { amount: number }) | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationFeedback, setVerificationFeedback] = useState<{ type: 'pending' | 'failed' | 'error'; message: string } | null>(null);
   
   // Start Campaign Modal State
   const [isStartCampaignOpen, setIsStartCampaignOpen] = useState(false);
@@ -76,6 +99,7 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
         description: newCampaign.description,
         target: parseFloat(newCampaign.target),
         raised: 0,
+        donorsCount: 0,
         image: downloadUrl,
         organizer: user.displayName || user.email || 'Anonymous',
         creatorId: user.uid,
@@ -99,62 +123,89 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
     return new Intl.NumberFormat('en-US').format(num);
   };
 
+  // User initiates donation: ONLY creates pending order, does NOT record as completed!
   const handleDonate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCampaign || !donationAmount) return;
     
     const amount = parseFloat(donationAmount.replace(/,/g, ''));
-    if (isNaN(amount) || amount <= 0) return;
+    if (isNaN(amount) || amount < 1000) {
+      alert('Minimum donation amount is 1,000 UGX.');
+      return;
+    }
 
     setIsProcessing(true);
+    setVerificationFeedback(null);
     try {
-      // 1. Immediately record in Firestore and update the campaign progress bar
-      const campaignRef = doc(db, 'campaigns', selectedCampaign.id);
-      await updateDoc(campaignRef, {
-        raised: increment(amount),
-        donorsCount: increment(1),
+      // Initiate pending payment with Pesapal gateway
+      const result = await initiateDonationPayment(
+        selectedCampaign,
+        amount,
+        donorName || user?.displayName || 'Kind Supporter',
+        donorEmail || user?.email || '',
+        user?.uid || null
+      );
+
+      // Save pending payment state for in-modal verification
+      setPendingPayment({
+        ...result,
+        amount
       });
 
-      // 2. Add donation transaction record
-      await addDoc(collection(db, 'donations'), {
-        campaignId: selectedCampaign.id,
-        campaignTitle: selectedCampaign.title,
-        amount: amount,
-        currency: 'UGX',
-        donorName: donorName.trim() || user?.displayName || 'Kind Supporter',
-        donorEmail: user?.email || '',
-        donorId: user?.uid || null,
-        createdAt: new Date().toISOString(),
-        timestamp: serverTimestamp(),
-        status: 'completed',
-      });
-
-      // 3. Initiate payment processing (Pesapal) if configured
-      try {
-        const response = await fetch('/api/pesapal/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: amount,
-            description: `Donation to: ${selectedCampaign.title}`,
-            reference: `DONATE-${Date.now()}`
-          })
-        });
-        const data = await response.json();
-        if (data.redirect_url) {
-          window.open(data.redirect_url, '_blank');
-        }
-      } catch (gateErr) {
-        console.warn('Payment gateway handoff notice:', gateErr);
+      // Open Pesapal gateway checkout in a new window/tab
+      if (result.redirectUrl) {
+        window.open(result.redirectUrl, '_blank');
       }
-
-      setDonationSuccessMsg(`Thank you! Your donation of UGX ${formatUGX(amount)} has been successfully recorded and the campaign progress bar has been updated.`);
     } catch (error: any) {
-      console.error('Donation error:', error);
-      alert(`Could not record donation: ${error?.message || 'Please try again.'}`);
+      console.error('Payment initiation error:', error);
+      setVerificationFeedback({
+        type: 'error',
+        message: error?.message || 'Could not connect to payment gateway. No amount has been recorded or charged.'
+      });
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // User clicks "Verify Payment Status" in modal
+  const handleVerifyPayment = async () => {
+    if (!pendingPayment) return;
+    setIsVerifying(true);
+    setVerificationFeedback(null);
+
+    try {
+      const result = await verifyAndRecordDonation(
+        pendingPayment.orderTrackingId,
+        pendingPayment.donationId
+      );
+
+      if (result.isCompleted) {
+        setDonationSuccessMsg(
+          `Payment of UGX ${formatUGX(pendingPayment.amount)} has been officially confirmed by Pesapal! The campaign progress bar has now been credited.`
+        );
+        setPendingPayment(null);
+      } else {
+        setVerificationFeedback({
+          type: 'pending',
+          message: `Payment status: "${result.status}". If you haven't completed the payment on Pesapal yet, please complete it now and click "Check Payment Status" again. Uncompleted payments will not be credited.`
+        });
+      }
+    } catch (err: any) {
+      setVerificationFeedback({
+        type: 'error',
+        message: err.message || 'Unable to check status with Pesapal at this time.'
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleCloseDonationModal = () => {
+    setSelectedCampaign(null);
+    setDonationSuccessMsg(null);
+    setPendingPayment(null);
+    setVerificationFeedback(null);
+    setIsProcessing(false);
   };
 
   return (
@@ -354,10 +405,7 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
               <img src={selectedCampaign.image} alt={selectedCampaign.title} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/60" />
               <button 
-                onClick={() => {
-                  setSelectedCampaign(null);
-                  setDonationSuccessMsg(null);
-                }}
+                onClick={handleCloseDonationModal}
                 className="absolute top-4 right-4 w-8 h-8 bg-black/50 hover:bg-black/80 rounded-full flex items-center justify-center text-white transition-colors backdrop-blur-md"
               >
                 <X className="w-4 h-4" />
@@ -370,10 +418,10 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
             
             {donationSuccessMsg ? (
               <div className="p-6 text-center animate-in fade-in duration-300">
-                <div className="w-16 h-16 rounded-full bg-[#F2B705]/20 text-[#F2B705] mx-auto flex items-center justify-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-[#1DB954]/20 text-[#1DB954] mx-auto flex items-center justify-center mb-4">
                   <CheckCircle2 className="w-10 h-10" />
                 </div>
-                <h3 className="text-[20px] font-bold text-[#F3F1EA] mb-2">Donation Recorded!</h3>
+                <h3 className="text-[20px] font-bold text-[#F3F1EA] mb-2">Payment Verified & Recorded!</h3>
                 <p className="text-[#9BA1A8] text-[14px] leading-relaxed mb-6">
                   {donationSuccessMsg}
                 </p>
@@ -387,22 +435,93 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
                     <span className="text-[#F2B705] font-bold">UGX {formatUGX(selectedCampaign.raised)}</span>
                   </div>
                   <div className="flex justify-between items-center text-[13px]">
-                    <span className="text-[#9BA1A8]">Goal Progress:</span>
-                    <span className="text-[#F3F1EA] font-semibold">
-                      {Math.min(100, Math.round((selectedCampaign.raised / selectedCampaign.target) * 100))}%
+                    <span className="text-[#9BA1A8]">Verified Status:</span>
+                    <span className="text-[#1DB954] font-semibold flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Completed
                     </span>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCampaign(null);
-                    setDonationSuccessMsg(null);
-                  }}
-                  className="w-full py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors"
+                  onClick={handleCloseDonationModal}
+                  className="w-full py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors cursor-pointer"
                 >
-                  Awesome, Close
+                  Close
                 </button>
+              </div>
+            ) : pendingPayment ? (
+              <div className="p-6 animate-in fade-in duration-300">
+                <div className="text-center mb-5">
+                  <div className="w-14 h-14 rounded-full bg-[#F2B705]/20 text-[#F2B705] mx-auto flex items-center justify-center mb-3">
+                    <Clock className="w-8 h-8 animate-pulse" />
+                  </div>
+                  <h3 className="text-[19px] font-bold text-[#F3F1EA] mb-1">Awaiting Pesapal Payment</h3>
+                  <p className="text-[#9BA1A8] text-[13px]">
+                    Complete payment in the checkout window.
+                  </p>
+                </div>
+
+                <div className="bg-[#14171A] border border-[#333A41] rounded-xl p-4 mb-5 text-[13px] space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[#9BA1A8]">Amount Due:</span>
+                    <span className="text-[#F2B705] font-bold text-[15px]">UGX {formatUGX(pendingPayment.amount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[#9BA1A8]">Reference:</span>
+                    <span className="text-[#F3F1EA] font-mono text-[12px]">{pendingPayment.reference}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[#9BA1A8]">Tracking ID:</span>
+                    <span className="text-[#F3F1EA] font-mono text-[12px] truncate max-w-[170px]">{pendingPayment.orderTrackingId}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5 bg-[#14171A] border border-[#333A41] rounded-xl p-3.5 mb-5 text-[12px] text-[#9BA1A8] leading-relaxed">
+                  <ShieldCheck className="w-4 h-4 text-[#1DB954] flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-[#F3F1EA]">Public Integrity Protection:</strong> Uncompleted payments are strictly never recorded. The campaign goal will only update once Pesapal verifies your completed payment.
+                  </span>
+                </div>
+
+                {verificationFeedback && (
+                  <div className={`p-3.5 rounded-xl border text-[13px] leading-relaxed mb-5 flex items-start gap-2.5 ${
+                    verificationFeedback.type === 'error' 
+                      ? 'bg-red-500/10 border-red-500/30 text-red-300' 
+                      : 'bg-[#F2B705]/10 border-[#F2B705]/30 text-[#F2B705]'
+                  }`}>
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{verificationFeedback.message}</span>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => window.open(pendingPayment.redirectUrl, '_blank')}
+                    className="w-full py-3 bg-[#333A41] hover:bg-[#434A51] text-[#F3F1EA] text-[14px] font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Re-open Pesapal Payment Page
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyPayment}
+                    disabled={isVerifying}
+                    className="w-full py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isVerifying ? 'animate-spin' : ''}`} />
+                    {isVerifying ? 'Verifying with Pesapal...' : 'Check Payment Status'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCloseDonationModal}
+                    className="w-full py-2.5 text-[#9BA1A8] hover:text-[#F3F1EA] text-[13px] font-medium transition-colors text-center cursor-pointer"
+                  >
+                    Cancel / Pay Later (Will Not Credit)
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleDonate} className="p-6">
@@ -449,45 +568,71 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
                   )}
                 </div>
 
-                <div className="mb-5">
-                  <label className="block text-[#9BA1A8] text-[13px] font-medium mb-1.5">
-                    Your Name or Handle (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={donorName}
-                    onChange={(e) => setDonorName(e.target.value)}
-                    disabled={isProcessing}
-                    placeholder={user?.displayName || "Kind Supporter"}
-                    className="w-full bg-[#14171A] border border-[#333A41] rounded-xl px-4 py-2.5 text-[14px] text-[#F3F1EA] outline-none focus:border-[#F2B705] transition-colors"
-                  />
+                <div className="space-y-3.5 mb-5">
+                  <div>
+                    <label className="block text-[#9BA1A8] text-[13px] font-medium mb-1.5">
+                      Your Name or Handle (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={donorName}
+                      onChange={(e) => setDonorName(e.target.value)}
+                      disabled={isProcessing}
+                      placeholder={user?.displayName || "Kind Supporter"}
+                      className="w-full bg-[#14171A] border border-[#333A41] rounded-xl px-4 py-2.5 text-[14px] text-[#F3F1EA] outline-none focus:border-[#F2B705] transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#9BA1A8] text-[13px] font-medium mb-1.5">
+                      Email Address (Optional, for Pesapal Receipt)
+                    </label>
+                    <input
+                      type="email"
+                      value={donorEmail}
+                      onChange={(e) => setDonorEmail(e.target.value)}
+                      disabled={isProcessing}
+                      placeholder={user?.email || "supporter@example.com"}
+                      className="w-full bg-[#14171A] border border-[#333A41] rounded-xl px-4 py-2.5 text-[14px] text-[#F3F1EA] outline-none focus:border-[#F2B705] transition-colors"
+                    />
+                  </div>
                 </div>
+
+                {verificationFeedback && (
+                  <div className="p-3.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-[13px] leading-relaxed mb-5 flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{verificationFeedback.message}</span>
+                  </div>
+                )}
                 
                 <div className="flex items-start gap-3 bg-[#F2B705]/10 border border-[#F2B705]/20 rounded-xl p-4 mb-6">
-                  <AlertCircle className="w-5 h-5 text-[#F2B705] flex-shrink-0 mt-0.5" />
+                  <ShieldCheck className="w-5 h-5 text-[#F2B705] flex-shrink-0 mt-0.5" />
                   <p className="text-[13px] text-[#F3F1EA]/90 leading-relaxed">
-                    100% of your donation is recorded live on the campaign goal. Secure checkout handoff is supported via Pesapal.
+                    <strong className="text-[#F2B705]">Strict Verification Rule:</strong> No funds are added to the campaign until your payment is 100% completed on Pesapal. Uncompleted attempts are never counted.
                   </p>
                 </div>
 
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedCampaign(null);
-                      setDonationSuccessMsg(null);
-                    }}
+                    onClick={handleCloseDonationModal}
                     disabled={isProcessing}
-                    className="flex-1 py-3.5 bg-[#333A41] hover:bg-[#434A51] text-[#F3F1EA] text-[15px] font-bold rounded-xl transition-colors disabled:opacity-50"
+                    className="flex-1 py-3.5 bg-[#333A41] hover:bg-[#434A51] text-[#F3F1EA] text-[15px] font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isProcessing || !donationAmount}
-                    className="flex-[2] py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-[2] py-3.5 bg-[#F2B705] hover:bg-[#F2B705]/90 text-[#14171A] text-[15px] font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {isProcessing ? 'Recording...' : `Confirm & Donate UGX ${donationAmount ? formatUGX(parseFloat(donationAmount.replace(/,/g, '')) || 0) : '0'}`}
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" /> Connecting...
+                      </>
+                    ) : (
+                      `Pay with Pesapal UGX ${donationAmount ? formatUGX(parseFloat(donationAmount.replace(/,/g, '')) || 0) : '0'}`
+                    )}
                   </button>
                 </div>
               </form>

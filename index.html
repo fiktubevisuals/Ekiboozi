@@ -23,6 +23,8 @@
     <link rel="mask-icon" href="/icon.svg" color="#F2B705" />
 
     <!-- Open Graph & Social Cards -->
+    <link rel="canonical" href="/" />
+    <meta property="og:site_name" content="Ekiboozi" />
     <meta property="og:title" content="Ekiboozi" />
     <meta property="og:description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
     <meta property="og:type" content="website" />
@@ -31,6 +33,29 @@
     <meta name="twitter:title" content="Ekiboozi" />
     <meta name="twitter:description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
     <meta name="twitter:image" content="/pwa-512x512.png" />
+
+    <!-- Schema.org Structured Data (JSON-LD) -->
+    <script id="schema-video-object" type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://ekiboozi.com/#website",
+          "url": "https://ekiboozi.com/",
+          "name": "Ekiboozi",
+          "description": "Every story has a stage — The video platform for trending stories, authentic creators, and live streams."
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Ekiboozi",
+          "applicationCategory": "EntertainmentApplication",
+          "operatingSystem": "All",
+          "description": "The video platform for trending stories, authentic creators, and live streams."
+        }
+      ]
+    }
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
