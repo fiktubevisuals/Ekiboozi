@@ -6,6 +6,173 @@
     <title>Ekiboozi</title>
     <meta name="description" content="Every story has a stage — The video platform for trending stories, authentic creators, and live streams." />
     
+    <!-- Vite dev WebSocket HMR shim & error filter for sandboxed iframe preview environment -->
+    <script>
+      (function() {
+        // 1. Shim WebSocket constructor specifically for Vite HMR connections
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var NativeWebSocket = window.WebSocket;
+
+          var FakeHmrSocket = (function() {
+            function FakeHmrSocket(url, protocols) {
+              var self = this;
+              self.url = typeof url === 'string' ? url : '';
+              self.protocol = Array.isArray(protocols) ? (protocols[0] || 'vite-hmr') : (protocols || 'vite-hmr');
+              self.readyState = 1; // WebSocket.OPEN
+              self.OPEN = 1;
+              self.CLOSED = 3;
+              self.CLOSING = 2;
+              self.CONNECTING = 0;
+              self.binaryType = 'blob';
+              self.bufferedAmount = 0;
+              self.extensions = '';
+              self.onopen = null;
+              self.onclose = null;
+              self.onerror = null;
+              self.onmessage = null;
+              self._listeners = {};
+
+              setTimeout(function() {
+                if (self.readyState === 1) {
+                  var openEvt = { type: 'open' };
+                  if (typeof self.onopen === 'function') {
+                    try { self.onopen(openEvt); } catch (_) {}
+                  }
+                  self.dispatchEvent(openEvt);
+                }
+              }, 0);
+            }
+
+            FakeHmrSocket.prototype.addEventListener = function(event, callback) {
+              if (!this._listeners[event]) this._listeners[event] = [];
+              this._listeners[event].push(callback);
+            };
+
+            FakeHmrSocket.prototype.removeEventListener = function(event, callback) {
+              if (this._listeners[event]) {
+                this._listeners[event] = this._listeners[event].filter(function(cb) { return cb !== callback; });
+              }
+            };
+
+            FakeHmrSocket.prototype.dispatchEvent = function(event) {
+              var type = event && event.type;
+              if (type && this._listeners[type]) {
+                var cbs = this._listeners[type].slice();
+                for (var i = 0; i < cbs.length; i++) {
+                  try { cbs[i].call(this, event); } catch (_) {}
+                }
+              }
+              return true;
+            };
+
+            FakeHmrSocket.prototype.send = function() {};
+
+            FakeHmrSocket.prototype.close = function() {
+              this.readyState = 3;
+              var closeEvt = { type: 'close', wasClean: true, code: 1000, reason: '' };
+              if (typeof this.onclose === 'function') {
+                try { this.onclose(closeEvt); } catch (_) {}
+              }
+              this.dispatchEvent(closeEvt);
+            };
+
+            return FakeHmrSocket;
+          })();
+
+          var MockWebSocket = function(url, protocols) {
+            var isViteHmr = false;
+            if (protocols === 'vite-hmr') isViteHmr = true;
+            if (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) isViteHmr = true;
+            if (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || (protocols && String(protocols).indexOf('vite-hmr') !== -1))) {
+              isViteHmr = true;
+            }
+
+            if (isViteHmr) {
+              return new FakeHmrSocket(url, protocols);
+            }
+
+            return protocols !== undefined
+              ? new NativeWebSocket(url, protocols)
+              : new NativeWebSocket(url);
+          };
+
+          MockWebSocket.prototype = NativeWebSocket.prototype;
+          MockWebSocket.OPEN = NativeWebSocket.OPEN || 1;
+          MockWebSocket.CLOSED = NativeWebSocket.CLOSED || 3;
+          MockWebSocket.CLOSING = NativeWebSocket.CLOSING || 2;
+          MockWebSocket.CONNECTING = NativeWebSocket.CONNECTING || 0;
+
+          try {
+            Object.defineProperty(MockWebSocket, Symbol.hasInstance, {
+              value: function(instance) {
+                return (instance instanceof FakeHmrSocket) || (instance instanceof NativeWebSocket);
+              }
+            });
+          } catch (_) {}
+
+          window.WebSocket = MockWebSocket;
+        }
+
+        // 2. Helper to identify benign environment errors (Vite HMR websocket or cross-origin script errors)
+        var isBenignError = function(msg) {
+          if (!msg) return false;
+          var s = String(msg).toLowerCase();
+          return (
+            s === 'script error.' ||
+            s === 'script error' ||
+            s.indexOf('script error') !== -1 ||
+            s.indexOf('websocket closed without opened') !== -1 ||
+            s.indexOf('failed to connect to websocket') !== -1 ||
+            s.indexOf('vite-hmr') !== -1 ||
+            s.indexOf('mockwebsocket') !== -1 ||
+            s.indexOf('illegal invocation') !== -1
+          );
+        };
+
+        // 3. Filter console.error from reporting Vite HMR WebSocket connection messages
+        var origConsoleError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var text = args.map(function(a) {
+            return (a && a.message) || String(a);
+          }).join(' ');
+          if (isBenignError(text)) {
+            return;
+          }
+          origConsoleError.apply(console, args);
+        };
+
+        // 4. Catch any global unhandled error, rejection, or window.onerror for benign environment errors
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message) || (e && e.error && e.error.message) || '';
+          if (isBenignError(msg)) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var msg = (e && e.reason && (e.reason.message || String(e.reason))) || '';
+          if (isBenignError(msg)) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        var prevOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (isBenignError(message)) {
+            return true;
+          }
+          if (typeof prevOnError === 'function') {
+            return prevOnError.apply(this, arguments);
+          }
+        };
+      })();
+    </script>
+    
     <!-- Mobile PWA & Theme Color (Android & iOS) -->
     <meta name="theme-color" content="#14171A" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -60,9 +227,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Google Interactive Media Ads (IMA) HTML5 SDK for In-Video Ads -->
-    <script async src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
   </head>
   <body class="bg-[#14171A] text-[#F3F1EA] antialiased min-h-screen">
     <div id="root"></div>

@@ -40,15 +40,20 @@ export const CreatorsRail: React.FC<CreatorsRailProps> = ({
       <div className="flex gap-5 sm:gap-[26px] overflow-x-auto px-4 sm:px-8 py-1 max-w-[1280px] mx-auto no-scrollbar">
         {displayCreators.map((creator) => {
           const isSelected = selectedCreatorId === creator.id;
+
+          const handleClick = () => {
+            onSelectCreator(isSelected ? null : creator.id);
+          };
+
           return (
             <div
               key={creator.id}
-              onClick={() => onSelectCreator(isSelected ? null : creator.id)}
+              onClick={handleClick}
               className="flex-shrink-0 flex flex-col items-center gap-2.5 w-[84px] text-center cursor-pointer group"
               title={`${creator.name} (${creator.subscribers} followers) - ${creator.featuredTopic}`}
             >
               <div
-                className={`w-16 h-16 rounded-full border-2 p-[2px] transition-all duration-200 group-hover:scale-105 ${
+                className={`relative w-16 h-16 rounded-full border-2 p-[2px] transition-all duration-200 group-hover:scale-105 flex items-center justify-center ${
                   isSelected
                     ? 'border-white ring-2 ring-[#F2B705]'
                     : 'border-[#F2B705] group-hover:border-white'

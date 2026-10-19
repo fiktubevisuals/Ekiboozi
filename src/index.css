@@ -79,3 +79,47 @@
   background-image: repeating-linear-gradient(115deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 64px);
   pointer-events: none;
 }
+
+/* Ekiboozi Floating Hearts Animation */
+@keyframes float-heart {
+  0% {
+    opacity: 0;
+    transform: translateY(0) translateX(0) scale(0.6) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-40px) translateX(var(--sway-x, 15px)) scale(1.15) rotate(10deg);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-160px) translateX(calc(var(--sway-x, 15px) * -1)) scale(1) rotate(-8deg);
+  }
+  85% {
+    opacity: 0.6;
+    transform: translateY(-280px) translateX(var(--sway-x, 15px)) scale(0.9) rotate(6deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-380px) translateX(calc(var(--sway-x, 15px) * -0.5)) scale(0.7) rotate(0deg);
+  }
+}
+
+.animate-float-heart {
+  animation-name: float-heart;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: forwards;
+}
+
+/* Pulsing Red Ring for Live Creators */
+@keyframes live-ring-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(225, 69, 69, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(225, 69, 69, 0);
+  }
+}
+
+.live-ring-pulse {
+  animation: live-ring-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}

@@ -8,7 +8,7 @@ import { Video, Creator, NavView, Comment, HeroCarouselItem, Campaign, Job, Foot
 import { collection, onSnapshot, doc, setDoc, updateDoc, increment, arrayUnion, arrayRemove, query, where, addDoc } from 'firebase/firestore';
 import { signInWithPopup, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './lib/firebase';
-import { getClientId, formatSubscriberCount, formatRelativeTime } from './utils/dateUtils';
+import { getClientId, formatSubscriberCount, formatRelativeTime, getTimeMillis } from './utils/dateUtils';
 import { Header } from './components/Header';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryRail } from './components/CategoryRail';
@@ -21,7 +21,10 @@ import { CreatorProfileView } from './components/CreatorProfileView';
 import { MiniPlayer } from './components/MiniPlayer';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { UploadModal } from './components/UploadModal';
+import { CreateActionModal } from './components/CreateActionModal';
+import { CameraRecordModal } from './components/CameraRecordModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { MyUploadsModal } from './components/MyUploadsModal';
 import { Footer } from './components/Footer';
 import { BottomNav } from './components/BottomNav';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -32,7 +35,7 @@ import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { CookieBanner } from './components/CookieBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
-import { Film, ShieldCheck, CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { Film, ShieldCheck, CheckCircle2, AlertTriangle, X, Radio, Sparkles } from 'lucide-react';
 import { DEFAULT_FOOTER_SETTINGS, DEFAULT_TERMS_SETTINGS } from './constants/legalDefaults';
 import { verifyAndRecordDonation } from './services/paymentService';
 import { useVideoSeo } from './hooks/useVideoSeo';
@@ -177,16 +180,24 @@ export default function App() {
 
     const unsubVideos = onSnapshot(collection(db, 'videos'), (snap) => {
       const vids: Video[] = [];
+      const seenIds = new Set<string>();
+
       snap.forEach(d => {
         const data = d.data();
+        const videoId = data.id || d.id;
+        if (!videoId || seenIds.has(videoId)) {
+          return;
+        }
+        seenIds.add(videoId);
+
         const likedBy = Array.isArray(data.likedBy) ? data.likedBy : [];
         const isLiked = likedBy.includes(clientId);
         const viewsCount = typeof data.viewsCount === 'number' ? data.viewsCount : (parseInt(data.views) || 0);
         const likes = typeof data.likes === 'number' ? data.likes : likedBy.length;
 
         vids.push({
-          id: d.id,
           ...data,
+          id: videoId,
           viewsCount,
           views: `${viewsCount}`,
           likes,
@@ -195,10 +206,10 @@ export default function App() {
         } as Video);
       });
       
-      // Sort by upload/published date (newest first)
+      // Sort by upload/published date (newest first) safely
       vids.sort((a, b) => {
-        const aT = new Date((a as any).createdAt || (a as any).publishedAt || a.timestamp || 0).getTime();
-        const bT = new Date((b as any).createdAt || (b as any).publishedAt || b.timestamp || 0).getTime();
+        const aT = getTimeMillis((a as any).createdAt || (a as any).publishedAt || a.timestamp);
+        const bT = getTimeMillis((b as any).createdAt || (b as any).publishedAt || b.timestamp);
         return bT - aT;
       });
       setVideos(vids);
@@ -249,7 +260,7 @@ export default function App() {
       });
       Object.keys(cmap).forEach(vid => {
         cmap[vid].sort((a: any, b: any) => {
-          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+          return getTimeMillis(b.createdAt) - getTimeMillis(a.createdAt);
         });
       });
       setCommentsMap(cmap);
@@ -296,7 +307,20 @@ export default function App() {
 
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isCreateChoiceOpen, setIsCreateChoiceOpen] = useState(false);
+  const [isRecordCameraOpen, setIsRecordCameraOpen] = useState(false);
+  const [recordedCameraFile, setRecordedCameraFile] = useState<File | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isMyUploadsOpen, setIsMyUploadsOpen] = useState(false);
+
+  const userUploadsCount = useMemo(() => {
+    if (!user) return 0;
+    return videos.filter(
+      (v) =>
+        v.creatorId === user.uid ||
+        (user.email && v.channel === (user.displayName || user.email.split('@')[0]))
+    ).length;
+  }, [videos, user]);
 
   const [jobApplications, setJobApplications] = useState<JobApplication[]>([]);
 
@@ -338,9 +362,6 @@ export default function App() {
 
     const interval = setInterval(() => {
       setPlaybackProgress((prev) => {
-        if (activeVideo.isLive) {
-          return (prev + 0.4) % 100;
-        }
         if (prev >= 100) {
           setIsPlaying(false);
           return 100;
@@ -373,7 +394,14 @@ export default function App() {
     }
   };
 
+  const handleVideoUpdated = (updatedVideo: Video) => {
+    setVideos((prev) =>
+      prev.map((v) => (v.id === updatedVideo.id ? { ...v, ...updatedVideo } : v))
+    );
+  };
+
   const handleStartPlaying = (video: Video) => {
+
     // Record progress of activeVideo first
     if (activeVideo) {
       recordWatchHistory(activeVideo.id, playbackProgress);
@@ -383,7 +411,7 @@ export default function App() {
       setActiveVideo(video);
       // Fetch new video's progress if available
       const historyRecord = watchHistory.find(h => h.videoId === video.id);
-      setPlaybackProgress(historyRecord?.playbackTimestamp || (video.isLive ? 25 : 5));
+      setPlaybackProgress(historyRecord?.playbackTimestamp || 5);
       setIsPlaying(true);
     }
     setIsMiniPlayer(false);
@@ -801,6 +829,16 @@ export default function App() {
     }
   };
 
+  // Display only real user videos (strictly zero mockup data)
+  const allDisplayVideos = useMemo(() => {
+    const seen = new Set<string>();
+    return videos.filter((v) => {
+      if (!v.id || seen.has(v.id)) return false;
+      seen.add(v.id);
+      return true;
+    });
+  }, [videos]);
+
   // Nav View Selection
   const handleSelectView = (view: NavView) => {
     setCurrentView(view);
@@ -820,7 +858,7 @@ export default function App() {
 
   // Overall search/category filter with real user data
   const filteredVideos = useMemo(() => {
-    let result = [...videos];
+    let result = [...allDisplayVideos];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -841,13 +879,13 @@ export default function App() {
     if (selectedCategory && selectedCategory !== 'For you') {
       const target = selectedCategory.toLowerCase();
       if (target === 'trending') {
-        return [...videos].sort(
+        return [...allDisplayVideos].sort(
           (a, b) => (b.likes || 0) + b.viewsCount - ((a.likes || 0) + a.viewsCount)
         );
       }
       if (target === 'following') {
-        const followedCreatorIds = creators.filter(c => c.isFollowed).map(c => c.id);
-        result = result.filter(v => followedCreatorIds.includes(v.creatorId));
+        const followedCreatorIds = creators.filter((c) => c.isFollowed).map((c) => c.id);
+        result = result.filter((v) => followedCreatorIds.includes(v.creatorId));
         return result;
       }
 
@@ -872,7 +910,7 @@ export default function App() {
     }
 
     return result;
-  }, [videos, searchQuery, selectedCreatorId, selectedCategory, creators]);
+  }, [allDisplayVideos, searchQuery, selectedCreatorId, selectedCategory, creators]);
 
   const followedCreators = creators.filter((c) => c.isFollowed);
   const likedVideosCount = videos.filter((v) => v.isLiked).length;
@@ -912,26 +950,33 @@ export default function App() {
     return commentsMap[activeVideo.id] || [];
   }, [activeVideo, commentsMap]);
 
-  // Combine custom hero items with recent video uploads
+  // Combine custom hero items with recent video uploads (strictly deduplicated)
   const combinedHeroItems = useMemo(() => {
     const items = [...heroItems];
-    
-    // Find the 3 most recent videos that aren't already linked in custom hero items
-    const linkedVideoIds = new Set(items.map(i => i.linkedVideoId).filter(Boolean));
-    const recentVideosAsItems: HeroCarouselItem[] = videos
-      .filter(v => !linkedVideoIds.has(v.id))
-      .slice(0, 3)
-      .map(v => ({
-        id: `auto_${v.id}`,
-        title: v.title,
-        subtitle: `New upload from ${v.channel}`,
-        // Use the lightweight thumbnail image for the hero spotlight so it loads in milliseconds
-        // instead of downloading a multi-megabyte raw video file in the background
-        mediaUrl: v.thumbnailUrl || '',
-        mediaType: 'image' as const,
-        posterUrl: v.thumbnailUrl || '',
-        linkedVideoId: v.id,
-      }));
+    const seenHeroIds = new Set(items.map((i) => i.id));
+    const linkedVideoIds = new Set(items.map((i) => i.linkedVideoId).filter(Boolean));
+
+    const recentVideosAsItems: HeroCarouselItem[] = [];
+    for (const v of videos) {
+      if (!v.id) continue;
+      if (!linkedVideoIds.has(v.id)) {
+        const heroId = `auto_${v.id}`;
+        if (!seenHeroIds.has(heroId)) {
+          seenHeroIds.add(heroId);
+          recentVideosAsItems.push({
+            id: heroId,
+            title: v.title,
+            subtitle: `New upload from ${v.channel}`,
+            // Use lightweight thumbnail image for instantaneous hero spotlight loading
+            mediaUrl: v.thumbnailUrl || '',
+            mediaType: 'image' as const,
+            posterUrl: v.thumbnailUrl || '',
+            linkedVideoId: v.id,
+          });
+        }
+      }
+      if (recentVideosAsItems.length >= 3) break;
+    }
 
     return [...items, ...recentVideosAsItems];
   }, [heroItems, videos]);
@@ -945,7 +990,7 @@ export default function App() {
         onSelectView={handleSelectView}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
-        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenUpload={() => setIsCreateChoiceOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         followingCount={followedCreators.length}
         user={user}
@@ -1114,15 +1159,20 @@ export default function App() {
                   <section className="px-4 sm:px-8 max-w-[1280px] mx-auto mb-12">
                     <h2 className="display-font text-[22px] font-semibold text-[#F3F1EA] mb-6">Watch History</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-6">
-                      {watchHistory
-                        .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime())
-                        .map(h => videos.find(v => v.id === h.videoId))
-                        .filter(v => v)
+                      {Array.from(
+                        new Set(
+                          [...watchHistory]
+                            .sort((a, b) => getTimeMillis(b.watchedAt) - getTimeMillis(a.watchedAt))
+                            .map((h) => h.videoId)
+                        )
+                      )
+                        .map((id) => videos.find((v) => v.id === id))
+                        .filter((v): v is Video => Boolean(v))
                         .slice(0, 4)
-                        .map(video => (
+                        .map((video) => (
                           <VideoCard 
-                            key={video!.id} 
-                            video={video!} 
+                            key={`hist-${video.id}`} 
+                            video={video} 
                             onPlay={handleStartPlaying}
                           />
                         ))}
@@ -1269,7 +1319,7 @@ export default function App() {
       <BottomNav
         currentView={currentView}
         onSelectView={handleSelectView}
-        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenUpload={() => setIsCreateChoiceOpen(true)}
         user={user}
         isAdmin={isAdmin}
       />
@@ -1309,19 +1359,57 @@ export default function App() {
             handleViewCreatorProfile(creatorId);
             setIsMiniPlayer(true);
           }}
-          allVideos={videos}
+          allVideos={allDisplayVideos}
           onPlayNext={(nextVideo) => {
             handleStartPlaying(nextVideo);
           }}
+          user={user}
+          onOpenMyUploads={() => setIsMyUploadsOpen(true)}
+          onDeleteVideo={handleDeleteVideo}
         />
       )}
+
+      {/* Creation Choice Sheet (Upload Video or Record Camera) */}
+      <CreateActionModal
+        isOpen={isCreateChoiceOpen}
+        onClose={() => setIsCreateChoiceOpen(false)}
+        onSelectUpload={() => setIsUploadOpen(true)}
+        onSelectRecordCamera={() => setIsRecordCameraOpen(true)}
+        user={user}
+        onSignIn={async () => {
+          try {
+            await signInWithPopup(auth, googleProvider);
+          } catch (error) {
+            console.error('Error signing in:', error);
+          }
+        }}
+      />
+
+      {/* Device Camera Recording Studio */}
+      <CameraRecordModal
+        isOpen={isRecordCameraOpen}
+        onClose={() => setIsRecordCameraOpen(false)}
+        onRecordingComplete={(file) => {
+          setRecordedCameraFile(file);
+          setIsRecordCameraOpen(false);
+          setIsUploadOpen(true);
+        }}
+      />
 
       {/* Upload Story Modal */}
       {isUploadOpen && (
         <UploadModal
-          onClose={() => setIsUploadOpen(false)}
+          onClose={() => {
+            setIsUploadOpen(false);
+            setRecordedCameraFile(null);
+          }}
           onUploadSuccess={handleUploadSuccess}
           user={user}
+          initialVideoFile={recordedCameraFile}
+          onOpenRecordCamera={() => {
+            setIsUploadOpen(false);
+            setIsRecordCameraOpen(true);
+          }}
         />
       )}
 
@@ -1334,12 +1422,27 @@ export default function App() {
           likedVideosCount={likedVideosCount}
           user={user}
           jobApplications={jobApplications}
+          onOpenMyUploads={() => setIsMyUploadsOpen(true)}
           onSignOut={async () => {
             await auth.signOut();
             setIsProfileOpen(false);
           }}
         />
       )}
+
+      {/* My Uploads & Content Management Studio Modal */}
+      <MyUploadsModal
+        isOpen={isMyUploadsOpen}
+        onClose={() => setIsMyUploadsOpen(false)}
+        user={user}
+        videos={videos}
+        jobs={jobs}
+        campaigns={campaigns}
+        onSelectVideo={handleStartPlaying}
+        onVideoUpdated={handleVideoUpdated}
+        onVideoDeleted={handleDeleteVideo}
+        onOpenUpload={() => setIsUploadOpen(true)}
+      />
 
       {/* Global Payment Result Notification */}
       {paymentNotice && (

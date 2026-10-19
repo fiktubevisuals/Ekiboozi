@@ -36,6 +36,15 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Live Chats & Events
+    match /live_chats/{chatId} {
+      allow read, write: if true;
+    }
+
+    match /live_events/{eventId} {
+      allow read, write: if true;
+    }
+
     // Hero Items
     match /hero_items/{heroItemId} {
       allow read, write: if true;

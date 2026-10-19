@@ -15,31 +15,84 @@ export function getClientId(): string {
   }
 }
 
-export function formatRelativeTime(dateInput?: string | number | Date | null): string {
+/**
+ * Robustly parses any date input (Date, timestamp, Firestore Timestamp, ISO string, object) into a valid Date
+ */
+export function parseToDate(dateInput?: unknown): Date | null {
+  if (!dateInput) return null;
+  try {
+    if (dateInput instanceof Date) {
+      return isNaN(dateInput.getTime()) ? null : dateInput;
+    }
+    if (typeof dateInput === 'number') {
+      const d = new Date(dateInput);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof dateInput === 'string') {
+      const d = new Date(dateInput);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof dateInput === 'object' && dateInput !== null) {
+      const obj = dateInput as Record<string, any>;
+      if (typeof obj.toDate === 'function') {
+        const d = obj.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+      if (typeof obj.toMillis === 'function') {
+        const d = new Date(obj.toMillis());
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (typeof obj.seconds === 'number') {
+        const d = new Date(obj.seconds * 1000);
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (typeof obj._seconds === 'number') {
+        const d = new Date(obj._seconds * 1000);
+        if (!isNaN(d.getTime())) return d;
+      }
+      if (typeof obj.getTime === 'function') {
+        const d = new Date(obj.getTime());
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Returns milliseconds timestamp safely, returning 0 if invalid
+ */
+export function getTimeMillis(dateInput?: unknown): number {
+  const d = parseToDate(dateInput);
+  return d ? d.getTime() : 0;
+}
+
+export function formatRelativeTime(dateInput?: unknown): string {
   if (!dateInput) return 'Just now';
 
-  // If already relative like "Just now", "2 hours ago", return as is
-  if (typeof dateInput === 'string' && (dateInput.includes('ago') || dateInput.toLowerCase() === 'just now')) {
-    return dateInput;
+  // If already relative like "Just now", "2 hours ago", "LIVE NOW", return as is
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (
+      trimmed.toLowerCase() === 'just now' ||
+      trimmed.toLowerCase().includes('ago') ||
+      trimmed.toLowerCase().includes('live')
+    ) {
+      return trimmed;
+    }
   }
 
-  let date: Date;
-  if (typeof dateInput === 'number') {
-    date = new Date(dateInput);
-  } else if (typeof dateInput === 'string') {
-    date = new Date(dateInput);
-  } else {
-    date = dateInput;
-  }
-
-  if (isNaN(date.getTime())) {
+  const date = parseToDate(dateInput);
+  if (!date) {
     return typeof dateInput === 'string' ? dateInput : 'Recently';
   }
 
   const now = new Date();
   const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (diffSec < 45) return 'Just now';
+  if (diffSec < 0 || diffSec < 45) return 'Just now';
   if (diffSec < 3600) {
     const mins = Math.max(1, Math.floor(diffSec / 60));
     return `${mins}m ago`;
@@ -64,20 +117,12 @@ export function formatRelativeTime(dateInput?: string | number | Date | null): s
   return `${years}y ago`;
 }
 
-export function formatPublishDate(dateInput?: string | number | Date | null): string {
+export function formatPublishDate(dateInput?: unknown): string {
   if (!dateInput) return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  let date: Date;
-  if (typeof dateInput === 'number') {
-    date = new Date(dateInput);
-  } else if (typeof dateInput === 'string') {
-    date = new Date(dateInput);
-  } else {
-    date = dateInput;
-  }
-
-  if (isNaN(date.getTime())) {
-    return String(dateInput);
+  const date = parseToDate(dateInput);
+  if (!date) {
+    return typeof dateInput === 'string' ? dateInput : 'Recently';
   }
 
   return date.toLocaleDateString('en-US', {

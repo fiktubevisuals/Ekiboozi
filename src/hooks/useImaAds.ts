@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SAMPLE_IMA_AD_TAGS, buildAdTagUrl } from '../utils/imaConstants';
+import { loadImaSdk } from '../utils/imaLoader';
 
 export interface UseImaAdsOptions {
   videoElement: HTMLVideoElement | null;
@@ -61,17 +62,27 @@ export function useImaAds({
   const playedCuepointsRef = useRef<Set<number>>(new Set());
   const simTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check if IMA SDK is loaded on the window
+  // Safely check and load IMA SDK on demand
   useEffect(() => {
+    let isMounted = true;
+    loadImaSdk().then((isLoaded) => {
+      if (isMounted && isLoaded) {
+        setAdState((prev) => ({ ...prev, isSdkLoaded: true }));
+      }
+    });
+
     const checkSdk = () => {
       if (typeof window !== 'undefined' && (window as any).google?.ima) {
-        setAdState((prev) => ({ ...prev, isSdkLoaded: true }));
+        if (isMounted) setAdState((prev) => ({ ...prev, isSdkLoaded: true }));
       }
     };
 
     checkSdk();
-    const interval = setInterval(checkSdk, 500);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkSdk, 1000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Cleanup Ads Manager

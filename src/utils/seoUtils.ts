@@ -70,7 +70,7 @@ export function generateVideoJsonLd(video: Video, customOrigin?: string): Record
   const thumbnailUrl = getAbsoluteUrl(video.thumbnailUrl || '/pwa-512x512.png', origin);
   const uploadDate = formatUploadDateIso(video.createdAt || video.publishedAt || video.timestamp);
   const duration = formatIsoDuration(video.durationSeconds, video.duration);
-  const description = video.description?.trim() || `Watch ${video.title} by ${video.channel} on Ekiboozi — the premier stage for authentic African creators, stories, and live entertainment.`;
+  const description = video.description?.trim() || `Watch ${video.title} by ${video.channel} on Ekiboozi — the premier stage for authentic African creators and stories.`;
 
   return {
     '@context': 'https://schema.org',
@@ -83,7 +83,6 @@ export function generateVideoJsonLd(video: Video, customOrigin?: string): Record
     duration: duration,
     contentUrl: video.videoUrl ? getAbsoluteUrl(video.videoUrl, origin) : canonicalUrl,
     embedUrl: canonicalUrl,
-    isLiveBroadcast: Boolean(video.isLive),
     genre: video.category || 'Entertainment',
     inLanguage: 'en',
     interactionStatistic: [

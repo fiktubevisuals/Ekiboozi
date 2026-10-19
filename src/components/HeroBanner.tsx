@@ -258,7 +258,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
               return (
                 <HeroSlide
-                  key={item.id || idx}
+                  key={`${item.id || 'hero'}-${idx}`}
                   item={item}
                   isActive={isActive}
                   isAdjacent={isAdjacent}

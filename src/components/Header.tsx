@@ -27,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   user,
   onSignIn
 }) => {
-  const navItems: { label: string; view: NavView; badge?: number }[] = [
+  const navItems: { label: string; view: NavView }[] = [
     { label: 'Home', view: 'home' },
     { label: 'Trending', view: 'trending' },
     { label: 'Music', view: 'music' },
@@ -65,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={item.view}
                 onClick={() => onSelectView(item.view)}
-                className={`relative py-1 transition-colors duration-150 cursor-pointer focus:outline-none ${
+                className={`relative py-1 transition-colors duration-150 cursor-pointer focus:outline-none flex items-center gap-1.5 ${
                   isActive ? 'text-[#F3F1EA] font-semibold' : 'hover:text-[#F3F1EA]'
                 }`}
               >
@@ -100,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Actions (Install App + Upload + Profile) */}
-        <div className="flex items-center gap-2 sm:gap-3.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
           <PWAInstallButton variant="compact" />
 
           {user ? (
@@ -148,7 +148,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               key={item.view}
               onClick={() => onSelectView(item.view)}
-              className={`px-3 py-1.5 rounded-full font-medium transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-full font-medium transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer flex items-center gap-1.5 ${
                 isActive
                   ? 'bg-[#F2B705] text-[#14171A] font-bold shadow-sm'
                   : 'text-[#9BA1A8] hover:text-[#F3F1EA] hover:bg-[#333A41]/40'

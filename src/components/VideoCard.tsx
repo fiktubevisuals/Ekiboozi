@@ -13,16 +13,20 @@ interface VideoCardProps {
 export const VideoCard: React.FC<VideoCardProps> = ({ video, onPlay, onSelectCreator, onToggleLike }) => {
   return (
     <div
-      className="flex flex-col gap-2.5 group cursor-pointer"
+      className="flex flex-col gap-2.5 group cursor-pointer relative hover:z-10 transform-gpu transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 hover:drop-shadow-[0_10px_24px_rgba(242,183,5,0.16)]"
       id={`video-card-${video.id}`}
     >
       {/* Thumbnail */}
       <div
         onClick={() => onPlay(video)}
-        className={`relative aspect-[16/10] rounded-[14px] overflow-hidden border border-[#333A41] bg-gradient-to-br ${video.thumbnailGradient} transition-transform duration-200 group-hover:border-[#9BA1A8]/40 shadow-sm`}
+        className={`relative aspect-[16/10] rounded-[14px] overflow-hidden border border-[#333A41] bg-gradient-to-br ${video.thumbnailGradient} transition-all duration-300 group-hover:border-[#F2B705]/45 group-hover:shadow-[0_0_24px_rgba(242,183,5,0.22),0_8px_20px_rgba(0,0,0,0.45)] shadow-sm`}
       >
         {video.thumbnailUrl && (
-          <img src={video.thumbnailUrl} alt={video.title} className="absolute inset-0 w-full h-full object-cover" />
+          <img
+            src={video.thumbnailUrl}
+            alt={video.title}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          />
         )}
         
         {/* Hover Dark Overlay */}
@@ -35,17 +39,10 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, onPlay, onSelectCre
           </svg>
         </div>
 
-        {/* Live / Duration Badge */}
-        {video.isLive ? (
-          <div className="absolute bottom-2 right-2 bg-[#E14545] text-white px-2 py-0.5 rounded-[5px] text-[11px] font-bold tracking-wide flex items-center gap-1 shadow">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-            LIVE
-          </div>
-        ) : (
-          <div className="absolute bottom-2 right-2 bg-[#0A0C0D]/80 backdrop-blur-xs text-[#F3F1EA] px-[7px] py-[2px] rounded-[5px] text-[12px] font-semibold tabular-nums border border-white/5">
-            {video.duration}
-          </div>
-        )}
+        {/* Duration Badge */}
+        <div className="absolute bottom-2 right-2 bg-[#0A0C0D]/80 backdrop-blur-xs text-[#F3F1EA] px-[7px] py-[2px] rounded-[5px] text-[12px] font-semibold tabular-nums border border-white/5">
+          {video.duration}
+        </div>
       </div>
 
       {/* Info Row */}

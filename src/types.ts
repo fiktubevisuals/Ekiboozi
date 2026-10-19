@@ -18,8 +18,6 @@ export interface Video {
   category: string;
   section: 'trending' | 'recommended' | 'music' | 'comedy' | 'custom' | 'hero';
   description?: string;
-  isLive?: boolean;
-  liveViewers?: string;
   likes: number;
   likedBy?: string[];
   isLiked?: boolean;

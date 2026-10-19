@@ -1,6 +1,6 @@
 import React from 'react';
 import { JobApplication, Creator, Video } from '../types';
-import { X, User, Heart, Film, Users, ShieldCheck, LogOut, Briefcase } from 'lucide-react';
+import { X, ShieldCheck, LogOut, Briefcase, Film } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface UserProfileModalProps {
@@ -11,6 +11,7 @@ interface UserProfileModalProps {
   user: FirebaseUser | null;
   onSignOut: () => void;
   jobApplications: JobApplication[];
+  onOpenMyUploads?: () => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -21,6 +22,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   user,
   onSignOut,
   jobApplications,
+  onOpenMyUploads,
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
@@ -56,7 +58,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <p className="text-[13px] text-[#9BA1A8]">{user?.email || 'Guest user'}</p>
           <div className="flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full bg-[#F2B705]/15 text-[#F2B705] text-[12px] font-semibold">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Verified Viewer</span>
+            <span>Verified Creator & Viewer</span>
           </div>
         </div>
 
@@ -75,6 +77,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="text-[11px] text-[#9BA1A8] mt-0.5">Stories</div>
           </div>
         </div>
+
+        {onOpenMyUploads && (
+          <button
+            onClick={() => {
+              onClose();
+              onOpenMyUploads();
+            }}
+            className="w-full mt-4 bg-[#F2B705]/15 hover:bg-[#F2B705]/25 text-[#F2B705] border border-[#F2B705]/40 flex items-center justify-between px-4 py-2.5 rounded-full font-semibold text-[13px] transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Film className="w-4 h-4 text-[#F2B705]" />
+              <span>Manage My Content & Uploads</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-[#14171A] text-[11px] font-mono text-white">
+              {userUploadedVideos.length}
+            </span>
+          </button>
+        )}
         
         {jobApplications.length > 0 && (
           <div className="py-4 border-b border-[#333A41]">
@@ -92,10 +112,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
         )}
 
-        <div className="mt-6 flex flex-col gap-3">
+        <div className="mt-6 flex flex-col gap-2.5">
           <button
             onClick={onSignOut}
-            className="w-full bg-[#E14545]/15 text-[#E14545] flex items-center justify-center gap-2 hover:bg-[#E14545]/25 font-medium text-[14px] py-2.5 rounded-full border border-transparent transition-colors"
+            className="w-full bg-[#E14545]/15 text-[#E14545] flex items-center justify-center gap-2 hover:bg-[#E14545]/25 font-medium text-[14px] py-2.5 rounded-full border border-transparent transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             Sign Out

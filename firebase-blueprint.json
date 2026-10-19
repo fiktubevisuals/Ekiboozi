@@ -18,6 +18,11 @@
         "likes": { "type": "number" },
         "commentsCount": { "type": "number" },
         "isLive": { "type": "boolean" },
+        "isShared": { "type": "boolean" },
+        "isBroadcastReplay": { "type": "boolean" },
+        "broadcastGoal": { "type": "string", "maxLength": 100 },
+        "peakViewers": { "type": "number" },
+        "totalDiamonds": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "creatorId", "category"]

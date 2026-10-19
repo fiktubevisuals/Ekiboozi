@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Video } from '../types';
 import { CATEGORIES } from '../constants';
-import { X, UploadCloud, Film, Image as ImageIcon } from 'lucide-react';
+import { X, UploadCloud, Film, Image as ImageIcon, Camera } from 'lucide-react';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -10,6 +10,8 @@ interface UploadModalProps {
   onClose: () => void;
   onUploadSuccess: (newVideo: Video) => void;
   user: FirebaseUser | null;
+  initialVideoFile?: File | null;
+  onOpenRecordCamera?: () => void;
 }
 
 // Helper to extract a lightweight, web-optimized thumbnail (max 1280x720, ~40KB)
@@ -82,13 +84,19 @@ const extractOptimizedThumbnail = (file: File): Promise<Blob | null> => {
   });
 };
 
-export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUploadSuccess, user }) => {
+export const UploadModal: React.FC<UploadModalProps> = ({
+  onClose,
+  onUploadSuccess,
+  user,
+  initialVideoFile = null,
+  onOpenRecordCamera,
+}) => {
   const [title, setTitle] = useState('');
   const [channel, setChannel] = useState(user?.displayName || 'Anonymous Creator');
   const [category, setCategory] = useState(CATEGORIES[1]);
   const [description, setDescription] = useState('');
   
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(initialVideoFile || null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState('0:00');
   const [autoThumbnailBlob, setAutoThumbnailBlob] = useState<Blob | null>(null);
@@ -280,10 +288,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUploadSucce
               <div className="space-y-6">
                 {/* Video Upload */}
                 <div>
-                  <label className="block text-[14px] font-semibold text-[#F3F1EA] mb-2 flex items-center gap-2">
-                    <Film className="w-4 h-4 text-[#F2B705]" />
-                    Video File *
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[14px] font-semibold text-[#F3F1EA] flex items-center gap-2">
+                      <Film className="w-4 h-4 text-[#F2B705]" />
+                      Video File *
+                    </label>
+                    {onOpenRecordCamera && (
+                      <button
+                        type="button"
+                        onClick={onOpenRecordCamera}
+                        className="text-xs font-bold text-[#21A8A3] hover:text-white bg-[#21A8A3]/15 hover:bg-[#21A8A3] px-3 py-1 rounded-full border border-[#21A8A3]/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Record with Camera</span>
+                      </button>
+                    )}
+                  </div>
                   {!videoPreviewUrl ? (
                     <div className="relative border-2 border-dashed border-[#333A41] rounded-[16px] p-8 text-center hover:border-[#F2B705] transition-colors cursor-pointer bg-[#1D2126] group">
                       <input

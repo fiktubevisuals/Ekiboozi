@@ -1,6 +1,6 @@
 import React from 'react';
 import { Video } from '../types';
-import { Play, Pause, Maximize2, X, Radio, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Maximize2, X, Volume2, VolumeX } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface MiniPlayerProps {
@@ -45,7 +45,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
         {/* Thumbnail Screen */}
         <div
           onClick={onExpand}
-          className={`relative w-20 sm:w-28 aspect-video rounded-[10px] bg-gradient-to-br ${video.thumbnailGradient} flex-shrink-0 cursor-pointer overflow-hidden border border-[#333A41] group/thumb`}
+          className="relative w-20 sm:w-28 aspect-video rounded-[10px] bg-gradient-to-br ${video.thumbnailGradient} flex-shrink-0 cursor-pointer overflow-hidden border border-[#333A41] group/thumb"
           title="Click to expand player"
         >
           {/* Subtle overlay */}
@@ -53,16 +53,9 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
             <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity drop-shadow" />
           </div>
 
-          {video.isLive ? (
-            <div className="absolute bottom-1 left-1 bg-[#E14545] text-white px-1.5 py-0.2 rounded text-[9px] font-bold flex items-center gap-1 shadow">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-              LIVE
-            </div>
-          ) : (
-            <div className="absolute bottom-1 right-1 bg-black/80 text-[#F3F1EA] px-1 py-0.2 rounded text-[10px] font-mono">
-              {video.duration}
-            </div>
-          )}
+          <div className="absolute bottom-1 right-1 bg-black/80 text-[#F3F1EA] px-1 py-0.2 rounded text-[10px] font-mono">
+            {video.duration}
+          </div>
         </div>
 
         {/* Video Info */}
@@ -71,19 +64,14 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
           className="min-w-0 flex-1 cursor-pointer pr-1"
           title="Click to expand player"
         >
-          <div className="flex items-center gap-1.5">
-            {video.isLive && (
-              <Radio className="w-3 h-3 text-[#E14545] animate-pulse flex-shrink-0" />
-            )}
-            <h3 className="text-[13px] font-semibold text-[#F3F1EA] truncate group-hover/mini:text-[#F2B705] transition-colors">
-              {video.title}
-            </h3>
-          </div>
+          <h3 className="text-[13px] font-semibold text-[#F3F1EA] truncate group-hover/mini:text-[#F2B705] transition-colors">
+            {video.title}
+          </h3>
           <div className="text-[11.5px] text-[#9BA1A8] truncate mt-0.5">
             {video.channel}
           </div>
           <div className="text-[10.5px] text-[#21A8A3] font-medium mt-0.5">
-            {video.isLive ? video.liveViewers || 'Live Stream' : `Playing • ${Math.round(progress)}%`}
+            {`Playing • ${Math.round(progress)}%`}
           </div>
         </div>
 

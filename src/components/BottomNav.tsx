@@ -15,7 +15,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   currentView,
   onSelectView,
   onOpenUpload,
-  user,
   isAdmin
 }) => {
   interface NavTabItem {
@@ -48,8 +47,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       onClick: () => onSelectView('trending')
     },
     {
-      id: 'upload',
-      label: 'Upload',
+      id: 'create',
+      label: 'Create',
       isAction: true,
       icon: Plus,
       isActive: false,
@@ -91,8 +90,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       onClick: () => onSelectView('trending')
     },
     {
-      id: 'upload',
-      label: 'Upload',
+      id: 'create',
+      label: 'Create',
       isAction: true,
       icon: Plus,
       isActive: false,

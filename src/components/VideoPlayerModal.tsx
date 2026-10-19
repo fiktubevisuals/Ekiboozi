@@ -36,8 +36,11 @@ import {
   RefreshCw,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Edit3,
+  Trash2
 } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 
 interface VideoPlayerModalProps {
   video: Video | null;
@@ -57,6 +60,9 @@ interface VideoPlayerModalProps {
   onSelectCreator: (creatorId: string) => void;
   allVideos: Video[];
   onPlayNext: (video: Video) => void;
+  user?: FirebaseUser | null;
+  onOpenMyUploads?: () => void;
+  onDeleteVideo?: (videoId: string) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -77,6 +83,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onSelectCreator,
   allVideos,
   onPlayNext,
+  user,
+  onOpenMyUploads,
+  onDeleteVideo,
 }) => {
   const [newCommentText, setNewCommentText] = useState('');
   const [copiedToast, setCopiedToast] = useState(false);
@@ -134,8 +143,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   } = useImaAds({
     videoElement: videoRef.current,
     adContainerElement: adContainerRef.current,
-    enablePreroll: !video?.isLive,
-    enableMidroll: !video?.isLive,
+    enablePreroll: true,
+    enableMidroll: true,
     midrollCuepoints,
     onContentPauseRequested: () => {
       if (videoRef.current) {
@@ -557,6 +566,36 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {user && video && (video.creatorId === user.uid || (user.email && video.channel === (user.displayName || user.email.split('@')[0]))) && (
+            <>
+              {onOpenMyUploads && (
+                <button
+                  onClick={onOpenMyUploads}
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-[13px] sm:text-[14px] font-bold bg-[#F2B705]/20 hover:bg-[#F2B705]/30 text-[#F2B705] border border-[#F2B705]/40 transition-colors cursor-pointer"
+                  title="Edit or Manage Story"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Edit Story</span>
+                </button>
+              )}
+              {onDeleteVideo && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to permanently delete "${video.title}"?`)) {
+                      onDeleteVideo(video.id);
+                      onClose();
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold bg-[#E14545]/20 hover:bg-[#E14545]/30 text-[#E14545] border border-[#E14545]/40 transition-colors cursor-pointer"
+                  title="Delete this story"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+              )}
+            </>
+          )}
+
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-[13px] sm:text-[14px] font-medium bg-white/10 hover:bg-white/20 text-[#F1F1F1] transition-colors cursor-pointer"
@@ -599,7 +638,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 autoPlay={isPlaying}
                 playsInline
                 muted={isMuted}
-                loop={!video.isLive}
+                loop
                 onTimeUpdate={(e) => {
                   const currentTime = e.currentTarget.currentTime;
                   const duration = e.currentTarget.duration;
@@ -610,7 +649,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   // Trigger scheduled mid-roll ads if eligible
                   checkMidroll(currentTime);
 
-                  if (!video.isLive && duration - currentTime <= 5 && duration > 10) {
+                  if (duration - currentTime <= 5 && duration > 10) {
                     setShowUpNext(true);
                     setCountdown(Math.ceil(duration - currentTime));
                   } else {
@@ -630,12 +669,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   }
                 }}
                 onEnded={() => {
-                  if (!video.isLive) {
-                    if (relatedVideos.length > 0) {
-                      onPlayNext(relatedVideos[0]);
-                    } else {
-                      onTogglePlay();
-                    }
+                  if (relatedVideos.length > 0) {
+                    onPlayNext(relatedVideos[0]);
+                  } else {
+                    onTogglePlay();
                   }
                 }}
               />
@@ -771,7 +808,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   resetControlsTimer();
                 }}
               >
-                {hoverProgress !== null && !video.isLive && (
+                {hoverProgress !== null && (
                   <div 
                     className="absolute bottom-5 -translate-x-1/2 bg-black/90 text-white text-[11px] sm:text-[12px] font-mono px-2 py-1 rounded shadow-lg pointer-events-none whitespace-nowrap border border-white/10"
                     style={{ left: `${hoverProgress}%` }}
@@ -827,21 +864,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   </button>
 
                   <div className="font-mono text-[11px] sm:text-[13px] text-white/90 select-none pl-0.5 sm:pl-0 whitespace-nowrap">
-                    {video.isLive ? (
-                      <span className="flex items-center gap-1 text-[#E14545] font-bold">
-                        <Radio className="w-3 h-3 animate-pulse" /> LIVE
-                      </span>
-                    ) : (
-                      <span>
-                        {formatTime((progress * (videoRef.current?.duration || video.durationSeconds)) / 100)} <span className="text-white/50">/</span> {video.duration}
-                      </span>
-                    )}
+                    <span>
+                      {formatTime((progress * (videoRef.current?.duration || video.durationSeconds)) / 100)} <span className="text-white/50">/</span> {video.duration}
+                    </span>
                   </div>
                 </div>
 
                 {/* Right controls */}
                 <div className="flex items-center gap-0.5 sm:gap-2">
-                  {!video.isLive && (
                     <div className="relative interactive-control">
                       <button 
                         onClick={(e) => {
@@ -888,7 +918,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                         </div>
                       )}
                     </div>
-                  )}
 
                   {video.videoUrl && (
                     <button 
