@@ -220,6 +220,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         channelAvatar: user?.photoURL ? '' : 'from-[#21A8A3] to-[#157A76]',
         channelInitials: initials,
         creatorId: user?.uid || channel.toLowerCase().replace(/\s+/g, '-'),
+        uploadedByUid: user?.uid || '',
+        userEmail: user?.email || '',
         views: '0',
         viewsCount: 0,
         timestamp: 'Just now',

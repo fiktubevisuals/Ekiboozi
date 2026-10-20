@@ -63,12 +63,13 @@ export const MyUploadsModal: React.FC<MyUploadsModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filter user's uploaded videos
+  // Filter user's uploaded videos strictly by creatorId or user email (never loosely by channel name)
   const userVideos = videos.filter((v) => {
     if (!user) return false;
     return (
       v.creatorId === user.uid ||
-      (user.email && v.channel === (user.displayName || user.email.split('@')[0]))
+      v.uploadedByUid === user.uid ||
+      (Boolean(v.userEmail) && Boolean(user.email) && v.userEmail!.toLowerCase() === user.email!.toLowerCase())
     );
   });
 

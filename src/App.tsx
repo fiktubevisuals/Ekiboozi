@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Video, Creator, NavView, Comment, HeroCarouselItem, Campaign, Job, FooterSettings, TermsSettings, WatchHistory, JobApplication } from './types';
-import { collection, onSnapshot, doc, setDoc, updateDoc, increment, arrayUnion, arrayRemove, query, where, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, increment, arrayUnion, arrayRemove, query, where, addDoc, getDocs } from 'firebase/firestore';
 import { signInWithPopup, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './lib/firebase';
 import { getClientId, formatSubscriberCount, formatRelativeTime, getTimeMillis } from './utils/dateUtils';
@@ -184,11 +184,13 @@ export default function App() {
 
       snap.forEach(d => {
         const data = d.data();
-        const videoId = data.id || d.id;
-        if (!videoId || seenIds.has(videoId)) {
+        const docId = d.id;
+        const payloadId = (data as any).id;
+        const customId = payloadId || docId;
+        if (!docId || seenIds.has(docId)) {
           return;
         }
-        seenIds.add(videoId);
+        seenIds.add(docId);
 
         const likedBy = Array.isArray(data.likedBy) ? data.likedBy : [];
         const isLiked = likedBy.includes(clientId);
@@ -197,7 +199,8 @@ export default function App() {
 
         vids.push({
           ...data,
-          id: videoId,
+          id: docId,
+          customId,
           viewsCount,
           views: `${viewsCount}`,
           likes,
@@ -693,6 +696,9 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const videoPayload: Video = {
       ...newVideo,
+      creatorId: user ? user.uid : newVideo.creatorId,
+      uploadedByUid: user?.uid || newVideo.uploadedByUid || '',
+      userEmail: user?.email || newVideo.userEmail || '',
       createdAt: newVideo.createdAt || nowIso,
       publishedAt: newVideo.publishedAt || nowIso,
       timestamp: formatRelativeTime(nowIso),
@@ -733,32 +739,113 @@ export default function App() {
     setSelectedCategory('For you');
   };
 
+  // Directly open camera recording studio on upload action
+  const handleOpenUploadAction = async () => {
+    if (!user) {
+      try {
+        await signInWithPopup(auth, googleProvider);
+        setIsRecordCameraOpen(true);
+      } catch (err) {
+        console.warn('Sign in for upload error:', err);
+      }
+      return;
+    }
+    setIsRecordCameraOpen(true);
+  };
+
   const handleDeleteVideo = async (videoId: string) => {
-    // 1. Optimistically update state
-    setVideos((prev) => prev.filter((v) => v.id !== videoId));
-    if (activeVideo?.id === videoId) {
+    // 1. Identify target video and resolve all potential Firestore document IDs
+    const targetVideo = videos.find((v) => v.id === videoId || v.customId === videoId);
+    const docId = targetVideo?.id || videoId;
+    const customId = targetVideo?.customId;
+
+    // 2. Optimistically update local state immediately
+    setVideos((prev) =>
+      prev.filter((v) => v.id !== videoId && v.id !== docId && (!customId || v.customId !== customId))
+    );
+    if (activeVideo?.id === videoId || activeVideo?.id === docId || activeVideo?.customId === videoId) {
       setActiveVideo(null);
       setIsMiniPlayer(false);
     }
-    // 2. Clear from local cache
+
+    // 3. Clear from local storage cache immediately
     try {
       const cached = localStorage.getItem('ekiboozi_videos_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
-        const filtered = parsed.filter((v: any) => v.id !== videoId);
+        const filtered = parsed.filter(
+          (v: any) => v.id !== videoId && v.id !== docId && (!customId || v.customId !== customId)
+        );
         localStorage.setItem('ekiboozi_videos_cache', JSON.stringify(filtered));
       }
     } catch {
       // ignore
     }
-    // 3. Delete document from Firestore
+
+    // 4. Delete permanently from Firestore:
+    // A) Delete by docId directly
     try {
-      const ref = doc(db, 'videos', videoId);
-      await deleteFirestoreDoc(ref);
-    } catch (error) {
-      console.error("Error deleting video from Firestore:", error);
-      alert("Failed to delete video from database. Check console for details.");
-      // In a production app, you might want to revert the optimistic update here
+      await deleteFirestoreDoc(doc(db, 'videos', docId));
+    } catch (err) {
+      console.warn("Direct doc deletion error for docId:", docId, err);
+    }
+
+    // B) Delete by customId if distinct
+    if (customId && customId !== docId) {
+      try {
+        await deleteFirestoreDoc(doc(db, 'videos', customId));
+      } catch (err) {
+        console.warn("Direct doc deletion error for customId:", customId, err);
+      }
+    }
+
+    // C) Query delete by field 'id' == videoId to ensure no document is left behind
+    try {
+      const q = query(collection(db, 'videos'), where('id', '==', videoId));
+      const qSnap = await getDocs(q);
+      const promises = qSnap.docs.map((d) => deleteFirestoreDoc(d.ref));
+      await Promise.all(promises);
+    } catch (err) {
+      console.warn("Query deletion by field 'id' error:", err);
+    }
+
+    // D) Also delete any associated hero items
+    try {
+      const qHero = query(collection(db, 'hero_items'), where('linkedVideoId', '==', videoId));
+      const heroSnap = await getDocs(qHero);
+      await Promise.all(heroSnap.docs.map((d) => deleteFirestoreDoc(d.ref)));
+    } catch {
+      // ignore
+    }
+
+    // E) Also delete any comments for this video
+    try {
+      const qComments = query(collection(db, 'comments'), where('videoId', '==', videoId));
+      const commentsSnap = await getDocs(qComments);
+      await Promise.all(commentsSnap.docs.map((d) => deleteFirestoreDoc(d.ref)));
+    } catch {
+      // ignore
+    }
+
+    // F) Also delete watch history records for this video
+    try {
+      const qHistory = query(collection(db, 'watch_history'), where('videoId', '==', videoId));
+      const historySnap = await getDocs(qHistory);
+      await Promise.all(historySnap.docs.map((d) => deleteFirestoreDoc(d.ref)));
+    } catch {
+      // ignore
+    }
+
+    // G) Decrement creator's videosCount if applicable
+    if (targetVideo?.creatorId) {
+      try {
+        const creatorRef = doc(db, 'creators', targetVideo.creatorId);
+        await updateDoc(creatorRef, {
+          videosCount: increment(-1),
+        });
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -915,6 +1002,17 @@ export default function App() {
   const followedCreators = creators.filter((c) => c.isFollowed);
   const likedVideosCount = videos.filter((v) => v.isLiked).length;
 
+  // Each user can ONLY view their own uploads under their profile (strictly isolated)
+  const currentUserUploadedVideos = useMemo(() => {
+    if (!user) return [];
+    return videos.filter((v) => {
+      if (v.creatorId && v.creatorId === user.uid) return true;
+      if (v.uploadedByUid && v.uploadedByUid === user.uid) return true;
+      if (v.userEmail && user.email && v.userEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      return false;
+    });
+  }, [user, videos]);
+
   // Selected Creator for Profile View
   const profileCreator = useMemo(() => {
     if (!selectedCreatorId) return null;
@@ -990,7 +1088,7 @@ export default function App() {
         onSelectView={handleSelectView}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
-        onOpenUpload={() => setIsCreateChoiceOpen(true)}
+        onOpenUpload={handleOpenUploadAction}
         onOpenProfile={() => setIsProfileOpen(true)}
         followingCount={followedCreators.length}
         user={user}
@@ -1319,7 +1417,7 @@ export default function App() {
       <BottomNav
         currentView={currentView}
         onSelectView={handleSelectView}
-        onOpenUpload={() => setIsCreateChoiceOpen(true)}
+        onOpenUpload={handleOpenUploadAction}
         user={user}
         isAdmin={isAdmin}
       />
@@ -1418,11 +1516,15 @@ export default function App() {
         <UserProfileModal
           onClose={() => setIsProfileOpen(false)}
           followedCreators={followedCreators}
-          userUploadedVideos={user ? videos.filter((v) => v.creatorId === user.uid) : []}
+          userUploadedVideos={currentUserUploadedVideos}
           likedVideosCount={likedVideosCount}
           user={user}
           jobApplications={jobApplications}
           onOpenMyUploads={() => setIsMyUploadsOpen(true)}
+          onSelectVideo={handleStartPlaying}
+          onVideoUpdated={handleVideoUpdated}
+          onVideoDeleted={handleDeleteVideo}
+          onOpenUpload={() => setIsUploadOpen(true)}
           onSignOut={async () => {
             await auth.signOut();
             setIsProfileOpen(false);

@@ -23,6 +23,8 @@
         "broadcastGoal": { "type": "string", "maxLength": 100 },
         "peakViewers": { "type": "number" },
         "totalDiamonds": { "type": "number" },
+        "uploadedByUid": { "type": "string", "maxLength": 100 },
+        "userEmail": { "type": "string", "maxLength": 100 },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "creatorId", "category"]

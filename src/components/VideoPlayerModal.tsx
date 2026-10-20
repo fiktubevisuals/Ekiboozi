@@ -566,7 +566,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {user && video && (video.creatorId === user.uid || (user.email && video.channel === (user.displayName || user.email.split('@')[0]))) && (
+          {user && video && (
+            video.creatorId === user.uid ||
+            video.uploadedByUid === user.uid ||
+            (Boolean(video.userEmail) && Boolean(user.email) && video.userEmail!.toLowerCase() === user.email!.toLowerCase())
+          ) && (
             <>
               {onOpenMyUploads && (
                 <button

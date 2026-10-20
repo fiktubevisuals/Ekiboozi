@@ -24,6 +24,9 @@ export interface Video {
   commentsCount: number;
   videoUrl?: string;
   viewedBy?: string[];
+  uploadedByUid?: string;
+  userEmail?: string;
+  customId?: string;
 }
 
 export interface Creator {
