@@ -132,10 +132,10 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <button
               onClick={onSignIn}
-              className="flex items-center gap-1.5 bg-[#F2B705] hover:bg-[#F2B705]/90 active:scale-95 text-[#14171A] px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-[13px] sm:text-[14px] font-semibold transition-all duration-150 cursor-pointer"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F2B705] hover:bg-[#ffc61a] active:scale-95 text-[#14171A] flex items-center justify-center transition-all duration-150 cursor-pointer shadow-sm"
+              title="Sign In"
             >
-              <User className="w-3.5 h-3.5 sm:w-[15px] sm:h-[15px]" />
-              <span>Sign In</span>
+              <User className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
             </button>
           )}
         </div>

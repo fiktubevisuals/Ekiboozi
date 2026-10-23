@@ -128,7 +128,7 @@ export interface JobApplication {
   appliedAt: string;
 }
 
-export type NavView = 'home' | 'trending' | 'music' | 'comedy' | 'support' | 'jobs' | 'job_details' | 'creator_profile' | 'admin' | 'terms' | 'privacy';
+export type NavView = 'home' | 'trending' | 'music' | 'comedy' | 'support' | 'jobs' | 'job_details' | 'creator_profile' | 'admin' | 'terms' | 'privacy' | 'login';
 
 export interface FooterLink {
   id: string;

@@ -2,6 +2,7 @@ import React from 'react';
 import { NavView, FooterSettings, FooterLink } from '../types';
 import { DEFAULT_FOOTER_SETTINGS } from '../constants/legalDefaults';
 import { Settings, ExternalLink } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 
 interface FooterProps {
   footerSettings?: FooterSettings;
@@ -9,6 +10,7 @@ interface FooterProps {
   onSelectView?: (view: NavView) => void;
   isAdmin?: boolean;
   onOpenAdminFooterTerms?: () => void;
+  user?: FirebaseUser | null;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -17,6 +19,7 @@ export const Footer: React.FC<FooterProps> = ({
   onSelectView,
   isAdmin,
   onOpenAdminFooterTerms,
+  user,
 }) => {
   const links: FooterLink[] = (footerSettings.links && footerSettings.links.length > 0)
     ? [...footerSettings.links].sort((a, b) => a.order - b.order)
@@ -59,6 +62,15 @@ export const Footer: React.FC<FooterProps> = ({
               </a>
             );
           })}
+
+          {!user && onSelectView && (
+            <button
+              onClick={() => onSelectView('login')}
+              className="text-[#F2B705] hover:underline font-semibold cursor-pointer text-[13.5px] transition-colors"
+            >
+              Sign In / Register
+            </button>
+          )}
 
           {isAdmin && onOpenAdminFooterTerms && (
             <button

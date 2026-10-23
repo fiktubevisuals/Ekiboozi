@@ -32,6 +32,7 @@ import { JobsView } from "./components/JobsView";
 import { JobDetailsView } from './components/JobDetailsView';
 import { TermsView } from './components/TermsView';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
+import { LoginView } from './components/LoginView';
 import { CookieBanner } from './components/CookieBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { deleteDoc as deleteFirestoreDoc } from 'firebase/firestore';
@@ -41,7 +42,37 @@ import { verifyAndRecordDonation } from './services/paymentService';
 import { useVideoSeo } from './hooks/useVideoSeo';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<NavView>('home');
+  const [currentView, setCurrentView] = useState<NavView>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get('view') || params.get('page');
+      if (
+        v === 'login' ||
+        v === 'signin' ||
+        v === 'signup' ||
+        window.location.pathname === '/login' ||
+        window.location.pathname === '/signup'
+      ) {
+        return 'login';
+      }
+      if (v === 'terms' || window.location.pathname === '/terms') {
+        return 'terms';
+      }
+      if (v === 'privacy' || window.location.pathname === '/privacy') {
+        return 'privacy';
+      }
+      if (v === 'jobs' || window.location.pathname === '/jobs') {
+        return 'jobs';
+      }
+      if (v === 'support' || window.location.pathname === '/support') {
+        return 'support';
+      }
+      if (v === 'music' || window.location.pathname === '/music') {
+        return 'music';
+      }
+    }
+    return 'home';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('For you');
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
@@ -357,6 +388,40 @@ export default function App() {
   }, [user]);
 
   const [isApplying, setIsApplying] = useState(false);
+
+  // Sync back/forward browser navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get('view') || params.get('page');
+      if (
+        v === 'login' ||
+        v === 'signin' ||
+        v === 'signup' ||
+        window.location.pathname === '/login' ||
+        window.location.pathname === '/signup'
+      ) {
+        setCurrentView('login');
+      } else if (v === 'terms' || window.location.pathname === '/terms') {
+        setCurrentView('terms');
+      } else if (v === 'privacy' || window.location.pathname === '/privacy') {
+        setCurrentView('privacy');
+      } else if (v === 'jobs' || window.location.pathname === '/jobs') {
+        setCurrentView('jobs');
+      } else if (v === 'support' || window.location.pathname === '/support') {
+        setCurrentView('support');
+      } else if (v === 'music' || window.location.pathname === '/music') {
+        setCurrentView('music');
+      } else if (v === 'admin') {
+        setCurrentView('admin');
+      } else {
+        setCurrentView('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Global playback timer
   React.useEffect(() => {
@@ -742,12 +807,7 @@ export default function App() {
   // Directly open camera recording studio on upload action
   const handleOpenUploadAction = async () => {
     if (!user) {
-      try {
-        await signInWithPopup(auth, googleProvider);
-        setIsRecordCameraOpen(true);
-      } catch (err) {
-        console.warn('Sign in for upload error:', err);
-      }
+      handleSelectView('login');
       return;
     }
     setIsRecordCameraOpen(true);
@@ -941,6 +1001,21 @@ export default function App() {
       setSelectedCategory('For you');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Sync browser URL query parameter
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (view === 'home') {
+        params.delete('view');
+        params.delete('page');
+      } else {
+        params.set('view', view);
+      }
+      const newQuery = params.toString();
+      window.history.pushState(null, '', newQuery ? `?${newQuery}` : window.location.pathname);
+    } catch {
+      // ignore
+    }
   };
 
   // Overall search/category filter with real user data
@@ -1092,17 +1167,19 @@ export default function App() {
         onOpenProfile={() => setIsProfileOpen(true)}
         followingCount={followedCreators.length}
         user={user}
-        onSignIn={async () => {
-          try {
-            await signInWithPopup(auth, googleProvider);
-          } catch (error) {
-            console.error('Error signing in:', error);
-          }
-        }}
+        onSignIn={() => handleSelectView('login')}
       />
 
       <main className="flex-1 w-full max-w-full overflow-x-hidden">
-        {currentView === 'admin' && isAdmin ? (
+        {currentView === 'login' ? (
+          <LoginView
+            user={user}
+            onBack={() => handleSelectView('home')}
+            onSuccess={() => handleSelectView('home')}
+            onNavigateToTerms={() => handleSelectView('terms')}
+            onNavigateToPrivacy={() => handleSelectView('privacy')}
+          />
+        ) : currentView === 'admin' && isAdmin ? (
           <AdminDashboard 
             videos={videos}
             creators={creators}
@@ -1411,6 +1488,7 @@ export default function App() {
         onSelectView={handleSelectView}
         isAdmin={isAdmin}
         onOpenAdminFooterTerms={() => handleSelectView('admin')}
+        user={user}
       />
 
       {/* Mobile Bottom Navigation Bar */}
@@ -1474,13 +1552,7 @@ export default function App() {
         onSelectUpload={() => setIsUploadOpen(true)}
         onSelectRecordCamera={() => setIsRecordCameraOpen(true)}
         user={user}
-        onSignIn={async () => {
-          try {
-            await signInWithPopup(auth, googleProvider);
-          } catch (error) {
-            console.error('Error signing in:', error);
-          }
-        }}
+        onSignIn={() => handleSelectView('login')}
       />
 
       {/* Device Camera Recording Studio */}
