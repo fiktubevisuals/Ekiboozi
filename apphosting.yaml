@@ -1,0 +1,19 @@
+# Firebase App Hosting Configuration
+# See https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: PESAPAL_ENV
+    value: "production"
+  - variable: PESAPAL_CONSUMER_KEY
+    secret: PESAPAL_CONSUMER_KEY
+    availability:
+      - RUNTIME
+  - variable: PESAPAL_CONSUMER_SECRET
+    secret: PESAPAL_CONSUMER_SECRET
+    availability:
+      - RUNTIME
