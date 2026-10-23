@@ -123,8 +123,8 @@ export const TermsView: React.FC<TermsViewProps> = ({
         lastUpdated: draftLastUpdated.trim() || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         executiveSummary: draftSummary.trim(),
         jurisdiction: draftJurisdiction.trim() || 'Republic of Uganda',
-        legalEmail: draftLegalEmail.trim() || 'legal@ekiboozi.ug',
-        supportEmail: draftSupportEmail.trim() || 'support@ekiboozi.ug',
+        legalEmail: draftLegalEmail.trim() || 'legal@ekiboozi.com',
+        supportEmail: draftSupportEmail.trim() || 'support@ekiboozi.com',
         sections: draftSections.map((s, idx) => ({
           ...s,
           order: idx + 1,
@@ -341,7 +341,7 @@ export const TermsView: React.FC<TermsViewProps> = ({
             <div className="mt-6 pt-5 border-t border-[#333A41] text-[12px] text-[#656C73]">
               Need help understanding these terms?
               <a
-                href={`mailto:${termsSettings.legalEmail || 'legal@ekiboozi.ug'}`}
+                href={`mailto:${termsSettings.legalEmail || 'legal@ekiboozi.com'}`}
                 className="block text-[#F2B705] hover:underline font-medium mt-1"
               >
                 Contact Ekiboozi Legal

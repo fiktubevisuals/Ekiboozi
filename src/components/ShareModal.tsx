@@ -55,9 +55,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const formattedCurrentTime = formatTime(currentTime);
 
-  // Compute shareable URL
-  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '';
-  const shareUrl = `${baseUrl}?v=${encodeURIComponent(video.id)}${
+  // Compute shareable URL with custom domain synchronization
+  const getShareBaseUrl = () => {
+    if (typeof window === 'undefined') return 'https://ekiboozi.com';
+    const host = window.location.hostname;
+    if (host.includes('ekiboozi.com')) {
+      return 'https://ekiboozi.com';
+    }
+    return window.location.origin;
+  };
+
+  const shareUrl = `${getShareBaseUrl()}/?v=${encodeURIComponent(video.id)}${
     includeTimestamp && currentTime > 1 ? `&t=${Math.floor(currentTime)}` : ''
   }`;
 

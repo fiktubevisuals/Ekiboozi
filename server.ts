@@ -5,7 +5,7 @@ import fs from 'fs';
 import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeFirestore, doc, getDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { generateVideoJsonLd } from './src/utils/seoUtils';
 
 async function startServer() {
@@ -13,7 +13,99 @@ async function startServer() {
   const server = http.createServer(app);
   const PORT = parseInt(process.env.PORT || '3000', 10);
 
+  // Enable trust proxy for Google Cloud Run SSL and custom domain proxy headers
+  app.set('trust proxy', true);
+
+  // Synchronize and enforce custom domain (ekiboozi.com)
+  app.use((req, res, next) => {
+    const host = (req.get('host') || '').toLowerCase();
+    const forwardedProto = req.get('x-forwarded-proto');
+
+    // 1. Redirect www.ekiboozi.com to canonical apex domain https://ekiboozi.com
+    if (host === 'www.ekiboozi.com') {
+      return res.redirect(301, `https://ekiboozi.com${req.originalUrl}`);
+    }
+
+    // 2. Enforce HTTPS when accessing ekiboozi.com
+    if (host === 'ekiboozi.com' && forwardedProto === 'http') {
+      return res.redirect(301, `https://ekiboozi.com${req.originalUrl}`);
+    }
+
+    next();
+  });
+
   app.use(express.json());
+
+  // Robots.txt endpoint for https://ekiboozi.com
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(`# Robots.txt for Ekiboozi (https://ekiboozi.com)
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /payment/
+
+Sitemap: https://ekiboozi.com/sitemap.xml
+`);
+  });
+
+  // Dynamic Sitemap.xml with video entries from Firestore on https://ekiboozi.com
+  app.get('/sitemap.xml', async (_req, res) => {
+    try {
+      const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+      let videoUrls: string[] = [];
+
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const appInstance = getApps().find(a => a.name === 'seo-server') || initializeApp(config, 'seo-server');
+        const db = initializeFirestore(appInstance, { experimentalForceLongPolling: true }, config.firestoreDatabaseId);
+        const videosSnap = await getDocs(collection(db, 'videos'));
+        videoUrls = videosSnap.docs.map(d => {
+          const data = d.data();
+          const vId = d.id;
+          const modTime = data.createdAt || new Date().toISOString();
+          return `  <url>
+    <loc>https://ekiboozi.com/?v=${encodeURIComponent(vId)}</loc>
+    <lastmod>${modTime.split('T')[0]}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+        });
+      }
+
+      const staticPages = [
+        { loc: 'https://ekiboozi.com/', changefreq: 'hourly', priority: '1.0' },
+        { loc: 'https://ekiboozi.com/?v=trending', changefreq: 'hourly', priority: '0.9' },
+        { loc: 'https://ekiboozi.com/?v=music', changefreq: 'daily', priority: '0.8' },
+        { loc: 'https://ekiboozi.com/?v=comedy', changefreq: 'daily', priority: '0.8' },
+        { loc: 'https://ekiboozi.com/?v=jobs', changefreq: 'daily', priority: '0.7' },
+        { loc: 'https://ekiboozi.com/?v=support', changefreq: 'weekly', priority: '0.7' },
+        { loc: 'https://ekiboozi.com/?v=terms', changefreq: 'monthly', priority: '0.5' },
+        { loc: 'https://ekiboozi.com/?v=privacy', changefreq: 'monthly', priority: '0.5' },
+      ];
+
+      const staticXml = staticPages.map(p => `  <url>
+    <loc>${p.loc}</loc>
+    <changefreq>${p.changefreq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join('\n');
+
+      const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
+${staticXml}
+${videoUrls.join('\n')}
+</urlset>`;
+
+      res.header('Content-Type', 'application/xml');
+      res.send(sitemapXml);
+    } catch {
+      const staticFile = path.resolve(process.cwd(), 'public/sitemap.xml');
+      if (fs.existsSync(staticFile)) {
+        return res.sendFile(staticFile);
+      }
+      res.status(500).send('Sitemap generation error');
+    }
+  });
 
   // Pesapal endpoints
   app.post('/api/pesapal/order', async (req, res) => {
@@ -73,9 +165,10 @@ async function startServer() {
 
       // 2. Register IPN if missing
       let ipnId = process.env.PESAPAL_IPN_ID;
-      const host = req.get('host') || 'localhost:3000';
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const callbackBase = `${protocol}://${host}`;
+      const host = (req.get('host') || '').toLowerCase();
+      const isCustomDomain = host === 'ekiboozi.com' || host === 'www.ekiboozi.com';
+      const protocol = isCustomDomain ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol || 'https');
+      const callbackBase = isCustomDomain ? 'https://ekiboozi.com' : `${protocol}://${req.get('host') || 'ekiboozi.com'}`;
 
       if (!ipnId || ipnId === 'MY_PESAPAL_IPN_ID') {
         try {
@@ -266,6 +359,15 @@ async function startServer() {
     }
   });
 
+  function getRequestOrigin(req: express.Request): string {
+    const host = (req.get('host') || '').toLowerCase();
+    if (host === 'ekiboozi.com' || host === 'www.ekiboozi.com') {
+      return 'https://ekiboozi.com';
+    }
+    const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    return `${protocol}://${req.get('host') || 'ekiboozi.com'}`;
+  }
+
   function escapeHtml(str: string): string {
     return str
       .replace(/&/g, '&amp;')
@@ -359,8 +461,7 @@ async function startServer() {
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
         template = await vite.transformIndexHtml(req.originalUrl, template);
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-        const origin = `${protocol}://${req.get('host')}`;
+        const origin = getRequestOrigin(req);
         const enrichedHtml = await injectVideoSeoIntoHtml(template, vId, origin);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(enrichedHtml);
       } catch {
@@ -378,8 +479,7 @@ async function startServer() {
 
       try {
         const template = fs.readFileSync(path.join(distPath, 'index.html'), 'utf-8');
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-        const origin = `${protocol}://${req.get('host')}`;
+        const origin = getRequestOrigin(req);
         const enrichedHtml = await injectVideoSeoIntoHtml(template, vId, origin);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(enrichedHtml);
       } catch {
@@ -394,8 +494,7 @@ async function startServer() {
       if (vId) {
         try {
           const template = fs.readFileSync(indexPath, 'utf-8');
-          const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-          const origin = `${protocol}://${req.get('host')}`;
+          const origin = getRequestOrigin(req);
           const enrichedHtml = await injectVideoSeoIntoHtml(template, vId, origin);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(enrichedHtml);
         } catch {

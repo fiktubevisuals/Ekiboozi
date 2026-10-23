@@ -49,8 +49,8 @@ export const SAMPLE_IMA_AD_TAGS: SampleAdTag[] = [
  */
 export function buildAdTagUrl(baseUrl: string, customParams?: { descriptionUrl?: string; contentTitle?: string }): string {
   const timestamp = Date.now().toString();
-  const pageUrl = encodeURIComponent(typeof window !== 'undefined' ? window.location.href : 'https://ekiboozi.ug');
-  const descriptionUrl = encodeURIComponent(customParams?.descriptionUrl || (typeof window !== 'undefined' ? window.location.href : 'https://ekiboozi.ug'));
+  const pageUrl = encodeURIComponent(typeof window !== 'undefined' ? window.location.href : 'https://ekiboozi.com');
+  const descriptionUrl = encodeURIComponent(customParams?.descriptionUrl || (typeof window !== 'undefined' ? window.location.href : 'https://ekiboozi.com'));
 
   let url = baseUrl;
 

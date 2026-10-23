@@ -164,3 +164,20 @@ export interface TermsSettings {
   sections: TermsSection[];
   updatedAt?: string;
 }
+
+export interface ContentReport {
+  id: string;
+  videoId: string;
+  videoTitle: string;
+  videoChannel: string;
+  videoThumbnail?: string;
+  videoUrl?: string;
+  creatorId?: string;
+  reason: string;
+  details?: string;
+  reportedByUid?: string;
+  reportedByEmail?: string;
+  status: 'pending' | 'reviewed' | 'dismissed' | 'actioned';
+  timestampSeconds?: number;
+  createdAt: string;
+}

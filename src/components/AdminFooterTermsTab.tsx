@@ -870,7 +870,7 @@ export const AdminFooterTermsTab: React.FC<AdminFooterTermsTabProps> = ({
                     if (newType === 'internal' && !['home', 'terms', 'jobs', 'support', 'trending', 'music', 'comedy'].includes(linkFormTarget)) {
                       setLinkFormTarget('terms');
                     } else if (newType === 'email' && !linkFormTarget.includes('@')) {
-                      setLinkFormTarget('support@ekiboozi.ug');
+                      setLinkFormTarget('support@ekiboozi.com');
                     } else if (newType === 'external' && !linkFormTarget.startsWith('http')) {
                       setLinkFormTarget('https://');
                     }
@@ -908,7 +908,7 @@ export const AdminFooterTermsTab: React.FC<AdminFooterTermsTabProps> = ({
                     onChange={(e) => setLinkFormTarget(e.target.value)}
                     placeholder={
                       linkFormType === 'email'
-                        ? 'support@ekiboozi.ug'
+                        ? 'support@ekiboozi.com'
                         : 'https://example.com'
                     }
                     className="w-full bg-[#14171A] border border-[#333A41] rounded-[10px] px-3.5 py-2.5 text-[#F3F1EA] text-[14px] focus:border-[#F2B705] outline-none"

@@ -43,7 +43,7 @@ export const DEFAULT_FOOTER_SETTINGS: FooterSettings = {
       id: 'link-help',
       label: 'Help',
       type: 'email',
-      target: 'mailto:support@ekiboozi.ug',
+      target: 'mailto:support@ekiboozi.com',
       order: 6,
     },
   ],
@@ -57,8 +57,8 @@ export const DEFAULT_TERMS_SETTINGS: TermsSettings = {
   executiveSummary:
     'Ekiboozi is built to empower African and global storytellers, viewers, and creative communities. You retain full ownership of the videos and content you upload. By using Ekiboozi, you agree to treat fellow creators with respect, post only authentic content you hold rights to, adhere to community standards, and comply with the laws of Uganda.',
   jurisdiction: 'Republic of Uganda',
-  legalEmail: 'legal@ekiboozi.ug',
-  supportEmail: 'support@ekiboozi.ug',
+  legalEmail: 'legal@ekiboozi.com',
+  supportEmail: 'support@ekiboozi.com',
   sections: [
     {
       id: 'acceptance',
@@ -107,7 +107,7 @@ export const DEFAULT_TERMS_SETTINGS: TermsSettings = {
       title: '7. Copyright & Intellectual Property Protection',
       order: 7,
       content:
-        'Ekiboozi respects the intellectual property of artists, filmmakers, musicians, and broadcasters. We comply with international copyright standards and the Copyright and Neighbouring Rights Act of Uganda.\n\nTakedown Policy: If you believe that your copyrighted work has been copied or posted on Ekiboozi in a way that constitutes copyright infringement, please submit a formal notice to our designated agent at copyright@ekiboozi.ug containing:\n• Identification of the copyrighted work claimed to have been infringed.\n• The URL or exact identifier of the infringing video or material on Ekiboozi.\n• Your legal contact information (name, address, telephone number, and email).\n• A statement of good faith belief that the use is not authorized by the copyright owner.\n• A statement made under penalty of perjury that the information is accurate and you are authorized to act on behalf of the owner.',
+        'Ekiboozi respects the intellectual property of artists, filmmakers, musicians, and broadcasters. We comply with international copyright standards and the Copyright and Neighbouring Rights Act of Uganda.\n\nTakedown Policy: If you believe that your copyrighted work has been copied or posted on Ekiboozi in a way that constitutes copyright infringement, please submit a formal notice to our designated agent at copyright@ekiboozi.com containing:\n• Identification of the copyrighted work claimed to have been infringed.\n• The URL or exact identifier of the infringing video or material on Ekiboozi.\n• Your legal contact information (name, address, telephone number, and email).\n• A statement of good faith belief that the use is not authorized by the copyright owner.\n• A statement made under penalty of perjury that the information is accurate and you are authorized to act on behalf of the owner.',
     },
     {
       id: 'termination',
@@ -135,7 +135,7 @@ export const DEFAULT_TERMS_SETTINGS: TermsSettings = {
       title: '11. Contact & Legal Notices',
       order: 11,
       content:
-        'If you have any questions, legal notices, copyright claims, or inquiries regarding these Terms and Conditions, please contact our legal and support team:\n\n• Legal & Compliance: legal@ekiboozi.ug (Kampala, Uganda)\n• General Inquiries & Safety: support@ekiboozi.ug (24/7 Creator Care)',
+        'If you have any questions, legal notices, copyright claims, or inquiries regarding these Terms and Conditions, please contact our legal and support team:\n\n• Legal & Compliance: legal@ekiboozi.com (Kampala, Uganda)\n• General Inquiries & Safety: support@ekiboozi.com (24/7 Creator Care)',
     },
   ],
 };

@@ -38,6 +38,132 @@ const TRENDING_SOUNDS = [
   { id: 'sound-4', title: 'Baximba Fusion Rhythm', artist: 'Kampala Studio', duration: '0:35' },
 ];
 
+// Creates an active animated camera viewfinder canvas stream for environments
+// where real device camera permissions are denied or unavailable.
+const createFallbackCameraStream = (): MediaStream | null => {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 720;
+    canvas.height = 1280;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    let frame = 0;
+    const render = () => {
+      frame++;
+      // Dark cinematic viewfinder background
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, '#101419');
+      grad.addColorStop(0.5, '#1A222C');
+      grad.addColorStop(1, '#0C0F12');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Viewfinder framing marks & grid lines
+      ctx.strokeStyle = 'rgba(242, 183, 5, 0.18)';
+      ctx.lineWidth = 1;
+      for (let x = 120; x < canvas.width; x += 120) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 160; y < canvas.height; y += 160) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Corner target brackets
+      const bracketSize = 36;
+      ctx.strokeStyle = '#F2B705';
+      ctx.lineWidth = 3;
+      // Top-Left
+      ctx.beginPath();
+      ctx.moveTo(50, 50 + bracketSize);
+      ctx.lineTo(50, 50);
+      ctx.lineTo(50 + bracketSize, 50);
+      ctx.stroke();
+      // Top-Right
+      ctx.beginPath();
+      ctx.moveTo(canvas.width - 50 - bracketSize, 50);
+      ctx.lineTo(canvas.width - 50, 50);
+      ctx.lineTo(canvas.width - 50, 50 + bracketSize);
+      ctx.stroke();
+      // Bottom-Left
+      ctx.beginPath();
+      ctx.moveTo(50, canvas.height - 50 - bracketSize);
+      ctx.lineTo(50, canvas.height - 50);
+      ctx.lineTo(50 + bracketSize, canvas.height - 50);
+      ctx.stroke();
+      // Bottom-Right
+      ctx.beginPath();
+      ctx.moveTo(canvas.width - 50 - bracketSize, canvas.height - 50);
+      ctx.lineTo(canvas.width - 50, canvas.height - 50);
+      ctx.lineTo(canvas.width - 50, canvas.height - 50 - bracketSize);
+      ctx.stroke();
+
+      // Center crosshair with breathing pulse
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const pulse = (Math.sin(frame * 0.08) + 1) / 2;
+      ctx.strokeStyle = `rgba(242, 183, 5, ${0.4 + pulse * 0.6})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 60 + pulse * 10, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Brand title
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('EKIBOOZI CAMERA STUDIO', cx, cy - 130);
+
+      ctx.fillStyle = '#F2B705';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('CAMERA VIEWFINDER ACTIVE', cx, cy - 90);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = '16px sans-serif';
+      ctx.fillText('Ready to record story or choose from files', cx, cy + 130);
+    };
+
+    render();
+    const intervalId = setInterval(render, 100);
+
+    const stream = (canvas as any).captureStream ? (canvas as any).captureStream(25) : null;
+    if (stream) {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const actx = new AudioCtx();
+          const osc = actx.createOscillator();
+          const dst = actx.createMediaStreamDestination();
+          osc.connect(dst);
+          osc.start();
+          const aTrack = dst.stream.getAudioTracks()[0];
+          if (aTrack) stream.addTrack(aTrack);
+        }
+      } catch {
+        // audio track optional
+      }
+
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) {
+        const origStop = vTrack.stop.bind(vTrack);
+        vTrack.stop = () => {
+          clearInterval(intervalId);
+          origStop();
+        };
+      }
+    }
+    return stream;
+  } catch {
+    return null;
+  }
+};
+
 export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
   isOpen,
   onClose,
@@ -48,6 +174,7 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isVirtualCamera, setIsVirtualCamera] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
@@ -113,22 +240,38 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
     setIsLoadingCamera(true);
     setCameraError(null);
 
-    // Stop existing tracks
+    // Stop existing tracks safely
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
       mediaStreamRef.current = null;
     }
 
     const deviceIdToUse = forcedDeviceId !== undefined ? forcedDeviceId : selectedDeviceId;
 
     // Check permissions query if supported by browser
-    if (navigator?.permissions?.query) {
+    if (typeof navigator !== 'undefined' && navigator?.permissions?.query) {
       try {
-        const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        const perm = await navigator.permissions.query({ name: 'camera' as any });
         if (perm && perm.state === 'denied') {
-          setIsCameraActive(false);
+          const fallback = createFallbackCameraStream();
+          if (fallback) {
+            mediaStreamRef.current = fallback;
+            setIsCameraActive(true);
+            setIsVirtualCamera(true);
+            if (liveVideoRef.current) {
+              liveVideoRef.current.srcObject = fallback;
+              liveVideoRef.current.muted = true;
+              liveVideoRef.current.play().catch(() => {});
+            }
+          }
           setCameraError(
-            'Camera permission is blocked in this browser tab. You can choose a video directly from your device or allow camera permissions in your browser.'
+            'Camera permission is blocked in this browser. You can select any video from your device or use Studio Mode.'
           );
           setIsLoadingCamera(false);
           return;
@@ -139,7 +282,7 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
     }
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (!navigator?.mediaDevices?.getUserMedia) {
         throw new Error('Camera access is not supported by your browser.');
       }
 
@@ -154,23 +297,24 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (err1: any) {
-        // If permission was denied by user, do not spam additional getUserMedia attempts
-        if (err1?.name === 'NotAllowedError' || err1?.name === 'PermissionDeniedError') {
-          throw err1;
-        }
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: cameraFacing },
-            audio: false,
-          });
-        } catch {
-          // Handled in outer catch
+        // If permission was denied, do not spam additional getUserMedia attempts
+        const isPermDenied = err1?.name === 'NotAllowedError' || err1?.name === 'PermissionDeniedError' || err1?.message?.toLowerCase().includes('permission');
+        if (!isPermDenied) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: cameraFacing },
+              audio: false,
+            });
+          } catch {
+            // Handled below
+          }
         }
       }
 
       if (stream) {
         mediaStreamRef.current = stream;
         setIsCameraActive(true);
+        setIsVirtualCamera(false);
         setCameraError(null);
 
         if (liveVideoRef.current) {
@@ -181,18 +325,37 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
 
         await updateDeviceList();
       } else {
-        throw new Error('Unable to start camera stream');
+        // Fallback gracefully to virtual camera so the modal and viewfinder remain operational
+        const fallback = createFallbackCameraStream();
+        if (fallback) {
+          mediaStreamRef.current = fallback;
+          setIsCameraActive(true);
+          setIsVirtualCamera(true);
+          if (liveVideoRef.current) {
+            liveVideoRef.current.srcObject = fallback;
+            liveVideoRef.current.muted = true;
+            liveVideoRef.current.play().catch(() => {});
+          }
+        }
+        setCameraError(
+          'Camera permission was not granted. Tap below to upload a video directly from your device, or test in Studio mode.'
+        );
       }
-    } catch (err: any) {
-      setIsCameraActive(false);
-      const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
-      const isNotFound = err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError';
+    } catch {
+      // Fallback gracefully on any camera error or security exception
+      const fallback = createFallbackCameraStream();
+      if (fallback) {
+        mediaStreamRef.current = fallback;
+        setIsCameraActive(true);
+        setIsVirtualCamera(true);
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = fallback;
+          liveVideoRef.current.muted = true;
+          liveVideoRef.current.play().catch(() => {});
+        }
+      }
       setCameraError(
-        isDenied
-          ? 'Camera permission was not granted. Tap below to upload a video directly from your device, or allow camera permissions in your browser.'
-          : isNotFound
-          ? 'No camera detected on this device. You can select an existing video from your files.'
-          : `Camera could not be started: ${err?.message || 'Check device permissions'}`
+        'Camera permission was not granted. Tap below to upload a video directly from your device, or test in Studio mode.'
       );
     } finally {
       setIsLoadingCamera(false);
@@ -313,8 +476,8 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
       setRecordDuration(0);
       setRecordingStage('recording');
     } catch (err: any) {
-      console.error('Failed to start MediaRecorder:', err);
-      setCameraError(`Recording failed: ${err.message}`);
+      console.warn('MediaRecorder warning:', err);
+      setCameraError(`Recording notice: ${err?.message || 'Select video from files'}`);
       setRecordingStage('idle');
     }
   };
@@ -392,7 +555,24 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
     const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
     setCameraFacing(nextFacing);
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          // ignore
+        }
+      });
+    }
+    if (isVirtualCamera) {
+      const fallback = createFallbackCameraStream();
+      if (fallback) {
+        mediaStreamRef.current = fallback;
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = fallback;
+          liveVideoRef.current.play().catch(() => {});
+        }
+      }
+      return;
     }
     navigator.mediaDevices
       ?.getUserMedia({
@@ -406,8 +586,7 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
           liveVideoRef.current.play().catch(() => {});
         }
       })
-      .catch((err) => {
-        console.warn('Flip camera error:', err);
+      .catch(() => {
         startCamera();
       });
   };
@@ -493,6 +672,13 @@ export const CameraRecordModal: React.FC<CameraRecordModalProps> = ({
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCamera ? 'animate-spin' : ''}`} />
                   <span>{isLoadingCamera ? 'Connecting...' : 'Retry Camera'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCameraError(null)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-white/5 hover:bg-white/10 text-[#9BA1A8] hover:text-white font-medium text-xs transition-colors cursor-pointer"
+                >
+                  Dismiss
                 </button>
               </div>
             </div>

@@ -1,0 +1,26 @@
+# Robots.txt for Ekiboozi (https://ekiboozi.com)
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /payment/
+
+# Crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Mediapartners-Google
+Allow: /
+
+User-agent: AdsBot-Google
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+Sitemap: https://ekiboozi.com/sitemap.xml

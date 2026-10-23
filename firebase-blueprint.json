@@ -130,6 +130,27 @@
         "appliedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "jobId", "status", "appliedAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "User reports flagging inappropriate content for moderator review.",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string", "maxLength": 100 },
+        "videoTitle": { "type": "string", "maxLength": 100 },
+        "videoChannel": { "type": "string", "maxLength": 100 },
+        "videoThumbnail": { "type": "string", "maxLength": 500 },
+        "videoUrl": { "type": "string", "maxLength": 500 },
+        "creatorId": { "type": "string", "maxLength": 100 },
+        "reason": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "reportedByUid": { "type": "string", "maxLength": 100 },
+        "reportedByEmail": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "dismissed", "actioned"] },
+        "timestampSeconds": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["videoId", "reason", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -164,6 +185,10 @@
     "/job_applications/{applicationId}": {
       "schema": { "$ref": "#/entities/JobApplication" },
       "description": "Stores job applications per user."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Stores content moderation reports for administrator and moderator review."
     }
   }
 }

@@ -38,7 +38,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Edit3,
-  Trash2
+  Trash2,
+  Flag
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -415,6 +416,81 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   } | null>(null);
   const [tipNotice, setTipNotice] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
 
+  // Content Reporting & Moderation State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState('Inappropriate or sexually explicit content');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reporterEmail, setReporterEmail] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportSubmittedSuccess, setReportSubmittedSuccess] = useState(false);
+  const [reportErrorMessage, setReportErrorMessage] = useState<string | null>(null);
+
+  const REPORT_REASONS = [
+    { id: 'inappropriate', label: 'Inappropriate or sexually explicit content', desc: 'Nudity, sexual acts, or adult content' },
+    { id: 'violent', label: 'Violent, dangerous or graphic content', desc: 'Graphic violence, dangerous challenges, or physical harm' },
+    { id: 'hateful', label: 'Hate speech or abusive content', desc: 'Targeting individuals or protected groups, slurs, defamation' },
+    { id: 'harassment', label: 'Harassment or cyberbullying', desc: 'Stalking, targeted intimidation, or personal attacks' },
+    { id: 'misinformation', label: 'Misinformation or harmful deception', desc: 'Dangerous medical advice, fake news, or manipulated media' },
+    { id: 'scam', label: 'Spam, scams or fraud', desc: 'Financial fraud, pyramid schemes, or fake giveaways' },
+    { id: 'copyright', label: 'Copyright or IP infringement', desc: 'Content used without permission from the legal rights owner' },
+    { id: 'child_safety', label: 'Child safety violation', desc: 'Any harm, exploitation, or endangerment of minors' },
+    { id: 'other', label: 'Other community guideline violation', desc: 'Any other violation of Ekiboozi platform policies' }
+  ];
+
+  const handleOpenReportModal = () => {
+    setIsReportModalOpen(true);
+    setReportSubmittedSuccess(false);
+    setReportErrorMessage(null);
+    if (user?.email) {
+      setReporterEmail(user.email);
+    }
+  };
+
+  const handleCloseReportModal = () => {
+    setIsReportModalOpen(false);
+    setReportSubmittedSuccess(false);
+    setReportErrorMessage(null);
+    setReportDetails('');
+  };
+
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!video) return;
+
+    try {
+      setIsSubmittingReport(true);
+      setReportErrorMessage(null);
+
+      await addDoc(collection(db, 'reports'), {
+        videoId: video.id,
+        videoTitle: video.title || 'Untitled Story',
+        videoChannel: video.channel || 'Anonymous',
+        videoThumbnail: video.thumbnailUrl || '',
+        videoUrl: video.videoUrl || '',
+        creatorId: video.creatorId || '',
+        reason: selectedReportReason,
+        details: reportDetails.trim(),
+        timestampSeconds: Math.floor(currentPlaybackSeconds || 0),
+        reportedByUid: user?.uid || 'anonymous',
+        reportedByEmail: user?.email || reporterEmail.trim() || 'anonymous@user',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+
+      setReportSubmittedSuccess(true);
+      setTimeout(() => {
+        setIsReportModalOpen(false);
+        setReportSubmittedSuccess(false);
+        setReportDetails('');
+      }, 2400);
+    } catch (err: any) {
+      console.error('Error submitting report:', err);
+      setReportErrorMessage(err?.message || 'Failed to submit report. Please try again.');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // Initiates real Pesapal checkout for tip/Super Thanks
   const handleSendTip = async (amount: number, label: string, icon: string) => {
     if (isNaN(amount) || amount < 1000) {
@@ -599,6 +675,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               )}
             </>
           )}
+
+          <button
+            onClick={handleOpenReportModal}
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-[13px] sm:text-[14px] font-medium bg-white/10 hover:bg-[#E14545]/20 hover:text-[#E14545] text-[#F1F1F1] transition-colors cursor-pointer"
+            title="Report inappropriate content for moderator review"
+            id="top-nav-report-btn"
+          >
+            <Flag className="w-4 h-4 text-[#E14545]" />
+            <span className="hidden sm:inline">Report</span>
+          </button>
 
           <button
             onClick={handleShare}
@@ -1175,6 +1261,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Report button */}
+                <button
+                  onClick={handleOpenReportModal}
+                  className="flex items-center gap-2 px-4 py-2 sm:px-4 sm:py-2.5 bg-[#272727] hover:bg-[#3F3F3F] text-[#F1F1F1] hover:text-[#E14545] rounded-full font-medium text-[14px] transition-colors flex-shrink-0 cursor-pointer active:scale-95 shadow-sm"
+                  title="Report inappropriate content for moderator review"
+                  id="action-bar-report-btn"
+                >
+                  <Flag className="w-5 h-5 text-[#E14545]" />
+                  <span>Report</span>
+                </button>
               </div>
             </div>
             
@@ -1432,6 +1529,184 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           video={video}
           currentTime={currentPlaybackSeconds || (progress / 100) * (video.durationSeconds || 180)}
         />
+      )}
+
+      {/* Flag / Report Inappropriate Content Modal */}
+      {isReportModalOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in"
+          onClick={handleCloseReportModal}
+        >
+          <div
+            className="w-full max-w-lg bg-[#1D2126] border border-[#333A41] rounded-[24px] shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#333A41] flex items-center justify-between bg-[#14171A]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#E14545]/20 text-[#E14545] flex items-center justify-center">
+                  <Flag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-[17px] font-bold text-[#F3F1EA]">Report Content</h3>
+                  <p className="text-[12px] text-[#9BA1A8]">Flag inappropriate content for moderator review</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseReportModal}
+                className="p-1.5 rounded-full hover:bg-white/10 text-[#9BA1A8] hover:text-[#F3F1EA] transition-colors cursor-pointer"
+                title="Close report modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            {reportSubmittedSuccess ? (
+              <div className="p-8 text-center flex flex-col items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="text-[18px] font-bold text-[#F3F1EA] mb-2">Report Submitted</h4>
+                <p className="text-[13px] text-[#9BA1A8] leading-relaxed max-w-sm mb-6">
+                  Thank you for helping keep Ekiboozi safe. Our community moderation team will review this story within 24 hours.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCloseReportModal}
+                  className="px-6 py-2.5 rounded-full bg-[#F2B705] hover:bg-[#E8890C] text-[#14171A] font-bold text-sm transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReport} className="flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar flex flex-col gap-4">
+                {/* Reported Story Context Card */}
+                <div className="flex items-center gap-3 p-3 rounded-[16px] bg-[#14171A] border border-[#333A41]">
+                  {video.thumbnailUrl ? (
+                    <img
+                      src={video.thumbnailUrl}
+                      alt={video.title}
+                      className="w-16 h-12 object-cover rounded-[10px] flex-shrink-0 bg-black"
+                    />
+                  ) : (
+                    <div className="w-16 h-12 rounded-[10px] bg-gradient-to-tr from-[#F2B705] to-[#E14545] flex items-center justify-center flex-shrink-0 text-xs font-bold text-black">
+                      Story
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-bold text-[#F3F1EA] truncate">{video.title}</p>
+                    <p className="text-[11px] text-[#9BA1A8] truncate">
+                      {video.channel} • Flagged at {formatTime(currentPlaybackSeconds)}
+                    </p>
+                  </div>
+                </div>
+
+                {reportErrorMessage && (
+                  <div className="p-3 rounded-[12px] bg-red-500/15 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{reportErrorMessage}</span>
+                  </div>
+                )}
+
+                {/* Violation Reason Selection */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#F3F1EA] mb-2">
+                    What is the primary issue with this story?
+                  </label>
+                  <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                    {REPORT_REASONS.map((r) => (
+                      <label
+                        key={r.id}
+                        className={`flex items-start gap-3 p-2.5 rounded-[12px] border cursor-pointer transition-all ${
+                          selectedReportReason === r.label
+                            ? 'bg-[#F2B705]/10 border-[#F2B705]/50 text-[#F3F1EA]'
+                            : 'bg-[#14171A] border-[#333A41] hover:border-white/20 text-[#9BA1A8]'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="report_reason"
+                          checked={selectedReportReason === r.label}
+                          onChange={() => setSelectedReportReason(r.label)}
+                          className="mt-0.5 accent-[#F2B705] cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium text-[#F3F1EA]">{r.label}</p>
+                          <p className="text-[11px] text-[#9BA1A8]">{r.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Additional Details */}
+                <div>
+                  <label className="block text-[13px] font-semibold text-[#F3F1EA] mb-1.5">
+                    Additional details <span className="text-[#9BA1A8] font-normal text-xs">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value.slice(0, 500))}
+                    placeholder="Provide any additional context or describe what happens in this clip..."
+                    className="w-full bg-[#14171A] border border-[#333A41] focus:border-[#F2B705] rounded-[14px] p-3 text-[13px] text-[#F3F1EA] placeholder:text-[#656C73] outline-none transition-colors resize-none"
+                  />
+                  <div className="flex justify-between text-[11px] text-[#656C73] mt-1">
+                    <span>Helps moderators act faster</span>
+                    <span>{reportDetails.length}/500</span>
+                  </div>
+                </div>
+
+                {/* Reporter Email */}
+                {!user && (
+                  <div>
+                    <label className="block text-[13px] font-semibold text-[#F3F1EA] mb-1.5">
+                      Your Email <span className="text-[#9BA1A8] font-normal text-xs">(for moderation updates)</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={reporterEmail}
+                      onChange={(e) => setReporterEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full bg-[#14171A] border border-[#333A41] focus:border-[#F2B705] rounded-[14px] px-3.5 py-2 text-[13px] text-[#F3F1EA] placeholder:text-[#656C73] outline-none transition-colors"
+                    />
+                  </div>
+                )}
+
+                {/* Modal Footer Actions */}
+                <div className="pt-2 flex items-center justify-end gap-3 border-t border-[#333A41] mt-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseReportModal}
+                    disabled={isSubmittingReport}
+                    className="px-4 py-2 text-xs font-semibold text-[#9BA1A8] hover:text-[#F3F1EA] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReport}
+                    className="px-5 py-2.5 rounded-full bg-[#E14545] hover:bg-[#c93636] disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 transition-transform active:scale-95 shadow-lg cursor-pointer"
+                    id="submit-report-btn"
+                  >
+                    {isSubmittingReport ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Flag className="w-3.5 h-3.5" />
+                        <span>Submit Report</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

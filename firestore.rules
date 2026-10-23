@@ -89,5 +89,10 @@ service cloud.firestore {
     match /job_applications/{applicationId} {
       allow read, write: if true;
     }
+
+    // Content Moderation Reports
+    match /reports/{reportId} {
+      allow read, write: if true;
+    }
   }
 }
