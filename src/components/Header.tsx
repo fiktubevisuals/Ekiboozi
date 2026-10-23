@@ -30,7 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const navItems: { label: string; view: NavView }[] = [
     { label: 'Home', view: 'home' },
-    { label: 'Trending', view: 'trending' },
     { label: 'Music', view: 'music' },
     { label: 'Support', view: 'support' },
   ];
