@@ -605,12 +605,7 @@ export const SupportView: React.FC<SupportViewProps> = ({ campaigns, jobs = [], 
                   </div>
                 )}
                 
-                <div className="flex items-start gap-3 bg-[#F2B705]/10 border border-[#F2B705]/20 rounded-xl p-4 mb-6">
-                  <ShieldCheck className="w-5 h-5 text-[#F2B705] flex-shrink-0 mt-0.5" />
-                  <p className="text-[13px] text-[#F3F1EA]/90 leading-relaxed">
-                    <strong className="text-[#F2B705]">Strict Verification Rule:</strong> No funds are added to the campaign until your payment is 100% completed on Pesapal. Uncompleted attempts are never counted.
-                  </p>
-                </div>
+
 
                 <div className="flex gap-3">
                   <button

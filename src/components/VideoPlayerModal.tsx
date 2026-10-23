@@ -49,6 +49,7 @@ import {
 import { User as FirebaseUser } from 'firebase/auth';
 import { saveVideoOffline, removeOfflineVideo, isVideoOfflineSync, getOfflineVideoBlobUrl } from '../utils/offlineVideoStorage';
 import { getVideoQualitySetting, setVideoQualitySetting, QUALITY_OPTIONS, QualityTier } from '../utils/videoQualitySettings';
+import { prebufferVideoInBackground, prebufferNextUpVideo } from '../utils/backgroundVideoPrebuffer';
 
 interface VideoPlayerModalProps {
   video: Video | null;
@@ -110,6 +111,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [cacheProgress, setCacheProgress] = useState(0);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const [backgroundBufferedPct, setBackgroundBufferedPct] = useState(0);
+  const [nativeBufferedPct, setNativeBufferedPct] = useState(0);
+
+  const effectiveBufferPct = Math.min(100, Math.max(Math.round(progress), nativeBufferedPct, backgroundBufferedPct));
 
   // Sync offline saved state & load cached blob URL if offline
   useEffect(() => {
@@ -125,6 +130,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       });
     } else {
       setOfflineBlobUrl(null);
+    }
+  }, [video?.id]);
+
+  // Background prebuffer active video & next video in queue as video plays
+  useEffect(() => {
+    if (!video?.videoUrl) return;
+
+    setBackgroundBufferedPct(0);
+
+    prebufferVideoInBackground(video.videoUrl, (pct) => {
+      setBackgroundBufferedPct(pct);
+    });
+
+    const nextVid = allVideos?.find((v) => v.id !== video.id);
+    if (nextVid?.videoUrl) {
+      prebufferNextUpVideo(nextVid.videoUrl);
     }
   }, [video?.id]);
 
@@ -824,12 +845,26 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 playsInline
                 muted={isMuted}
                 loop
+                onProgress={(e) => {
+                  const v = e.currentTarget;
+                  if (v.buffered && v.buffered.length > 0 && v.duration > 0) {
+                    const bufferedEnd = v.buffered.end(v.buffered.length - 1);
+                    const bufPct = Math.min(100, Math.round((bufferedEnd / v.duration) * 100));
+                    setNativeBufferedPct(bufPct);
+                  }
+                }}
                 onTimeUpdate={(e) => {
                   const currentTime = e.currentTarget.currentTime;
                   const duration = e.currentTarget.duration;
                   setCurrentPlaybackSeconds(currentTime);
                   const pct = (currentTime / duration) * 100;
                   if (!isNaN(pct)) onProgressChange(pct);
+
+                  if (e.currentTarget.buffered && e.currentTarget.buffered.length > 0 && duration > 0) {
+                    const bufferedEnd = e.currentTarget.buffered.end(e.currentTarget.buffered.length - 1);
+                    const bufPct = Math.min(100, Math.round((bufferedEnd / duration) * 100));
+                    setNativeBufferedPct(bufPct);
+                  }
 
                   // Trigger scheduled mid-roll ads if eligible
                   checkMidroll(currentTime);
@@ -1017,8 +1052,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     );
                   })}
 
+                  {/* Background Prefetched Buffer Line */}
+                  {effectiveBufferPct > 0 && (
+                    <div
+                      className="absolute inset-y-0 left-0 bg-white/60 rounded-full transition-[width] duration-150 pointer-events-none z-5"
+                      style={{ width: `${Math.max(progress, effectiveBufferPct)}%` }}
+                      title={`Buffered ahead: ${effectiveBufferPct}%`}
+                    />
+                  )}
+
                   <div 
-                    className="absolute inset-y-0 left-0 bg-[#F2B705] rounded-full transition-[width] duration-75" 
+                    className="absolute inset-y-0 left-0 bg-[#F2B705] rounded-full transition-[width] duration-75 z-10" 
                     style={{ width: `${progress}%` }}
                   >
                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-3 sm:h-3 bg-[#F2B705] rounded-full shadow-md scale-100 sm:scale-0 sm:group-hover/scrub:scale-100 transition-transform" />
@@ -1048,10 +1092,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     {isMuted ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6 text-[#E14545]" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
                   </button>
 
-                  <div className="font-mono text-[11px] sm:text-[13px] text-white/90 select-none pl-0.5 sm:pl-0 whitespace-nowrap">
+                  <div className="font-mono text-[11px] sm:text-[13px] text-white/90 select-none pl-0.5 sm:pl-0 whitespace-nowrap flex items-center gap-2">
                     <span>
                       {formatTime((progress * (videoRef.current?.duration || video.durationSeconds)) / 100)} <span className="text-white/50">/</span> {video.duration}
                     </span>
+                    {effectiveBufferPct > 0 && (
+                      <span
+                        className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-[#F2B705] border border-white/10 font-bold"
+                        title={`${effectiveBufferPct}% of this video is pre-downloaded ahead in the background`}
+                      >
+                        <Zap className="w-3 h-3 text-[#F2B705] fill-current" />
+                        <span>{effectiveBufferPct}% Pre-downloaded</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
