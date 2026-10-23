@@ -25,6 +25,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { CATEGORIES } from '../constants';
 import { formatRelativeTime, formatViewCount } from '../utils/dateUtils';
+import { ThemeToggle } from './ThemeToggle';
 
 interface UserProfileModalProps {
   onClose: () => void;
@@ -387,6 +388,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Appearance / Theme Settings */}
+              <div className="py-3 border-t border-[#333A41] flex items-center justify-between">
+                <div>
+                  <h4 className="text-[14px] font-semibold text-[#F3F1EA]">Appearance</h4>
+                  <p className="text-[12px] text-[#9BA1A8]">Toggle between Midnight Dark & High-Contrast Light</p>
+                </div>
+                <ThemeToggle showLabel />
+              </div>
 
               {/* Bottom Actions */}
               <div className="pt-2 flex flex-col gap-2.5">

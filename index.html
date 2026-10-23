@@ -175,6 +175,22 @@
         };
       })();
     </script>
+
+    <!-- Theme pre-hydration to prevent theme flashing on load -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('ekiboozi_theme');
+          if (saved === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.classList.add('light-theme');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'midnight');
+            document.documentElement.classList.remove('light-theme');
+          }
+        } catch (_) {}
+      })();
+    </script>
     
     <!-- Mobile PWA & Theme Color (Android & iOS) -->
     <meta name="theme-color" content="#14171A" />

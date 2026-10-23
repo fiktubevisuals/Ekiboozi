@@ -3,6 +3,7 @@ import { NavView } from '../types';
 import { Search, Plus, X, User } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { PWAInstallButton } from './PWAInstallButton';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   currentView: NavView;
@@ -99,9 +100,10 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Actions (Install App + Upload + Profile) */}
+        {/* Actions (Install App + Theme Toggle + Upload + Profile) */}
         <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
           <PWAInstallButton variant="compact" />
+          <ThemeToggle showLabel />
 
           {user ? (
             <>

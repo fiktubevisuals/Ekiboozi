@@ -119,7 +119,6 @@ ${videoUrls.join('\n')}
 
       const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || 'default_key';
       const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || 'default_secret';
-      const PESAPAL_ENV = process.env.PESAPAL_ENV || 'production';
 
       if (
         !PESAPAL_CONSUMER_KEY ||
@@ -134,9 +133,7 @@ ${videoUrls.join('\n')}
         });
       }
 
-      const baseUrl = PESAPAL_ENV === 'production' 
-        ? 'https://pay.pesapal.com/v3'
-        : 'https://cybqa.pesapal.com/pesapalv3';
+      const baseUrl = getPesapalBaseUrl();
 
       // 1. Get Auth Token
       const authResponse = await fetch(`${baseUrl}/api/Auth/RequestToken`, {
@@ -155,7 +152,7 @@ ${videoUrls.join('\n')}
       if (!authResponse.ok || !authData.token) {
         if (authData?.error?.code === 'invalid_consumer_key_or_secret_provided') {
           return res.status(400).json({
-            error: `Invalid Pesapal API Keys for environment: ${PESAPAL_ENV}. Please check your credentials.`
+            error: `Invalid Pesapal API Keys for environment (${baseUrl}). Please check your credentials.`
           });
         }
         return res.status(500).json({
@@ -165,10 +162,7 @@ ${videoUrls.join('\n')}
 
       // 2. Register IPN if missing
       let ipnId = process.env.PESAPAL_IPN_ID;
-      const host = (req.get('host') || '').toLowerCase();
-      const isCustomDomain = host === 'ekiboozi.com' || host === 'www.ekiboozi.com';
-      const protocol = isCustomDomain ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol || 'https');
-      const callbackBase = isCustomDomain ? 'https://ekiboozi.com' : `${protocol}://${req.get('host') || 'ekiboozi.com'}`;
+      const callbackBase = getRequestOrigin(req);
 
       if (!ipnId || ipnId === 'MY_PESAPAL_IPN_ID') {
         try {
@@ -290,7 +284,6 @@ ${videoUrls.join('\n')}
 
       const PESAPAL_CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY || 'default_key';
       const PESAPAL_CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET || 'default_secret';
-      const PESAPAL_ENV = process.env.PESAPAL_ENV || 'production';
 
       if (
         !PESAPAL_CONSUMER_KEY ||
@@ -307,9 +300,7 @@ ${videoUrls.join('\n')}
         });
       }
 
-      const baseUrl = PESAPAL_ENV === 'production' 
-        ? 'https://pay.pesapal.com/v3'
-        : 'https://cybqa.pesapal.com/pesapalv3';
+      const baseUrl = getPesapalBaseUrl();
 
       // 1. Get Auth Token
       const authResponse = await fetch(`${baseUrl}/api/Auth/RequestToken`, {
@@ -359,9 +350,16 @@ ${videoUrls.join('\n')}
     }
   });
 
+  function getPesapalBaseUrl(): string {
+    const env = (process.env.PESAPAL_ENV || '').toLowerCase().trim();
+    const isSandbox = env.includes('sandbox') || env.includes('demo') || env.includes('cybqa') || env.includes('test') || env.includes('qa');
+    return isSandbox ? 'https://cybqa.pesapal.com/pesapalv3' : 'https://pay.pesapal.com/v3';
+  }
+
   function getRequestOrigin(req: express.Request): string {
     const host = (req.get('host') || '').toLowerCase();
-    if (host === 'ekiboozi.com' || host === 'www.ekiboozi.com') {
+    const forwardedHost = (req.get('x-forwarded-host') || '').toLowerCase();
+    if (host.includes('ekiboozi.com') || forwardedHost.includes('ekiboozi.com')) {
       return 'https://ekiboozi.com';
     }
     const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
