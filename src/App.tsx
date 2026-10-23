@@ -305,7 +305,7 @@ export default function App() {
   const [isMiniPlayer, setIsMiniPlayer] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [watchHistory, setWatchHistory] = useState<WatchHistory[]>([]);
-  const [playbackProgress, setPlaybackProgress] = useState(15);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
 
   // Modals
@@ -414,7 +414,7 @@ export default function App() {
       setActiveVideo(video);
       // Fetch new video's progress if available
       const historyRecord = watchHistory.find(h => h.videoId === video.id);
-      setPlaybackProgress(historyRecord?.playbackTimestamp || 5);
+      setPlaybackProgress(historyRecord?.playbackTimestamp || 0);
       setIsPlaying(true);
     }
     setIsMiniPlayer(false);
