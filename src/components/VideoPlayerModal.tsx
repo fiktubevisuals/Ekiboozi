@@ -39,9 +39,16 @@ import {
   AlertTriangle,
   Edit3,
   Trash2,
-  Flag
+  Flag,
+  Download,
+  Zap,
+  WifiOff,
+  Loader2,
+  HardDrive
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
+import { saveVideoOffline, removeOfflineVideo, isVideoOfflineSync, getOfflineVideoBlobUrl } from '../utils/offlineVideoStorage';
+import { getVideoQualitySetting, setVideoQualitySetting, QUALITY_OPTIONS, QualityTier } from '../utils/videoQualitySettings';
 
 interface VideoPlayerModalProps {
   video: Video | null;
@@ -94,6 +101,65 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [currentPlaybackSeconds, setCurrentPlaybackSeconds] = useState(0);
   const [isTipMenuOpen, setIsTipMenuOpen] = useState(false);
   const [customTipAmount, setCustomTipAmount] = useState('');
+
+  // Bandwidth & Offline PWA State
+  const [qualitySetting, setQualitySettingState] = useState<QualityTier>(getVideoQualitySetting);
+  const [isQualityMenuOpen, setIsQualityMenuOpen] = useState(false);
+  const [isOfflineSaved, setIsOfflineSaved] = useState(false);
+  const [isCachingVideo, setIsCachingVideo] = useState(false);
+  const [cacheProgress, setCacheProgress] = useState(0);
+  const [offlineBlobUrl, setOfflineBlobUrl] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+
+  // Sync offline saved state & load cached blob URL if offline
+  useEffect(() => {
+    if (!video) return;
+    const offline = isVideoOfflineSync(video.id);
+    setIsOfflineSaved(offline);
+
+    if (offline && video.videoUrl) {
+      getOfflineVideoBlobUrl(video.videoUrl).then((blobUrl) => {
+        if (blobUrl) {
+          setOfflineBlobUrl(blobUrl);
+        }
+      });
+    } else {
+      setOfflineBlobUrl(null);
+    }
+  }, [video?.id]);
+
+  const handleToggleOfflineSave = async () => {
+    if (!video) return;
+    if (isCachingVideo) return;
+
+    if (isOfflineSaved) {
+      await removeOfflineVideo(video.id);
+      setIsOfflineSaved(false);
+      setOfflineBlobUrl(null);
+      setOfflineNotice('Video removed from offline cache.');
+      setTimeout(() => setOfflineNotice(null), 3500);
+    } else {
+      try {
+        setIsCachingVideo(true);
+        setCacheProgress(0);
+        await saveVideoOffline(video, (pct) => setCacheProgress(pct));
+        setIsOfflineSaved(true);
+        setOfflineNotice('Video saved offline! Watch anytime without mobile data.');
+        setTimeout(() => setOfflineNotice(null), 4000);
+      } catch (err: any) {
+        setOfflineNotice(`Save failed: ${err.message || 'Cache error'}`);
+        setTimeout(() => setOfflineNotice(null), 4000);
+      } finally {
+        setIsCachingVideo(false);
+      }
+    }
+  };
+
+  const handleSelectQuality = (tier: QualityTier) => {
+    setVideoQualitySetting(tier);
+    setQualitySettingState(tier);
+    setIsQualityMenuOpen(false);
+  };
 
   const TIP_OPTIONS = [
     { id: 'boda', label: 'Boda Ride', price: '2,000 UGX', amount: 2000, icon: '🏍️' },
@@ -706,6 +772,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         </div>
       </div>
 
+      {/* Offline Toast Notification Banner */}
+      {offlineNotice && (
+        <div className="bg-[#21A8A3]/20 border-b border-[#21A8A3]/40 text-[#21A8A3] px-4 py-2.5 text-[13px] font-semibold flex items-center justify-between animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4 flex-shrink-0" />
+            <span>{offlineNotice}</span>
+          </div>
+          <button onClick={() => setOfflineNotice(null)} className="p-1 hover:bg-white/10 rounded-full cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="max-w-[1800px] mx-auto px-4 sm:px-6 pt-4 pb-16 flex flex-col lg:flex-row gap-6">
         {/* Main Content Column */}
         <div className="flex-1 min-w-0">
@@ -718,10 +797,26 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             onDoubleClick={handleStageDoubleClick}
             className="w-full relative aspect-video rounded-xl sm:rounded-2xl overflow-hidden bg-black flex items-center justify-center group select-none cursor-pointer"
           >
+            {/* Low Data Mode / Bandwidth Badge Overlay */}
+            {qualitySetting === '360p' && (
+              <div className="absolute top-3 left-3 z-30 bg-[#F2B705] text-[#14171A] px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm pointer-events-none">
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>Low Data Mode (360p)</span>
+              </div>
+            )}
+
+            {/* Offline Saved Badge Overlay */}
+            {isOfflineSaved && (
+              <div className="absolute top-3 right-3 z-30 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm pointer-events-none">
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>Playing Offline Cache</span>
+              </div>
+            )}
+
             {video.videoUrl ? (
               <video
                 ref={videoRef}
-                src={video.videoUrl}
+                src={offlineBlobUrl || video.videoUrl}
                 poster={video.thumbnailUrl}
                 preload="auto"
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none"
@@ -1272,6 +1367,86 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   <Flag className="w-5 h-5 text-[#E14545]" />
                   <span>Report</span>
                 </button>
+
+                {/* Save Offline PWA Download Button */}
+                <button
+                  onClick={handleToggleOfflineSave}
+                  disabled={isCachingVideo}
+                  className={`flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full font-medium text-[13px] sm:text-[14px] transition-all flex-shrink-0 cursor-pointer active:scale-95 shadow-sm ${
+                    isOfflineSaved
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'
+                      : 'bg-[#272727] hover:bg-[#3F3F3F] text-[#F1F1F1]'
+                  }`}
+                  title={isOfflineSaved ? 'Video saved for offline viewing (Click to remove)' : 'Save video offline to watch without mobile data'}
+                >
+                  {isCachingVideo ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#F2B705]" />
+                      <span>Saving {cacheProgress}%</span>
+                    </>
+                  ) : isOfflineSaved ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Saved Offline</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 text-[#3EA6FF]" />
+                      <span>Save Offline</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Low Data / Resolution Switcher */}
+                <div className="relative flex-shrink-0">
+                  <button
+                    onClick={() => setIsQualityMenuOpen(!isQualityMenuOpen)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full font-medium text-[13px] sm:text-[14px] transition-all cursor-pointer active:scale-95 shadow-sm ${
+                      qualitySetting === '360p'
+                        ? 'bg-[#F2B705]/20 text-[#F2B705] border border-[#F2B705]/40 hover:bg-[#F2B705]/30'
+                        : 'bg-[#272727] hover:bg-[#3F3F3F] text-[#F1F1F1]'
+                    }`}
+                    title="Change streaming resolution / Low Data Mode"
+                  >
+                    <Zap className={`w-4 h-4 ${qualitySetting === '360p' ? 'text-[#F2B705]' : 'text-[#AAAAAA]'}`} />
+                    <span>{qualitySetting === '360p' ? '360p Low Data' : qualitySetting === 'auto' ? 'Auto Quality' : qualitySetting.toUpperCase()}</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                  </button>
+
+                  {/* Quality Dropdown Menu */}
+                  {isQualityMenuOpen && (
+                    <div
+                      className="absolute bottom-full right-0 mb-2 bg-[#1A1D21] border border-[#333A41] rounded-2xl shadow-2xl p-2 z-50 min-w-[240px] animate-in fade-in zoom-in-95"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="px-3 py-1.5 text-[11px] font-bold text-[#9BA1A8] uppercase tracking-wider border-b border-[#333A41]/60 mb-1 flex items-center justify-between">
+                        <span>Streaming Quality</span>
+                        <Zap className="w-3.5 h-3.5 text-[#F2B705]" />
+                      </div>
+                      {QUALITY_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => handleSelectQuality(opt.id)}
+                          className={`w-full px-3 py-2 rounded-xl text-left transition-colors flex items-center justify-between cursor-pointer ${
+                            qualitySetting === opt.id
+                              ? 'bg-[#F2B705]/15 text-[#F2B705] font-bold'
+                              : 'text-[#F3F1EA] hover:bg-white/10'
+                          }`}
+                        >
+                          <div>
+                            <div className="text-[13px] font-semibold flex items-center gap-1.5">
+                              <span>{opt.label}</span>
+                            </div>
+                            <div className="text-[11px] text-[#9BA1A8] font-normal">{opt.description}</div>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/80 font-mono ml-2 whitespace-nowrap">
+                            {opt.dataSavings}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             

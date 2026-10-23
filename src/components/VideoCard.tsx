@@ -1,7 +1,8 @@
 import React from 'react';
 import { Video } from '../types';
 import { formatRelativeTime, formatViewCount } from '../utils/dateUtils';
-import { Heart } from 'lucide-react';
+import { Heart, Download } from 'lucide-react';
+import { isVideoOfflineSync } from '../utils/offlineVideoStorage';
 
 interface VideoCardProps {
   video: Video;
@@ -38,6 +39,14 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, onPlay, onSelectCre
             <path d="M8 5v14l12-7L8 5z" />
           </svg>
         </div>
+
+        {/* Saved Offline Badge */}
+        {isVideoOfflineSync(video.id) && (
+          <div className="absolute top-2 left-2 bg-emerald-500/90 text-white px-2 py-0.5 rounded-[5px] text-[10px] font-bold flex items-center gap-1 shadow-md backdrop-blur-xs">
+            <Download className="w-3 h-3" />
+            <span>Saved Offline</span>
+          </div>
+        )}
 
         {/* Duration Badge */}
         <div className="absolute bottom-2 right-2 bg-[#0A0C0D]/80 backdrop-blur-xs text-[#F3F1EA] px-[7px] py-[2px] rounded-[5px] text-[12px] font-semibold tabular-nums border border-white/5">

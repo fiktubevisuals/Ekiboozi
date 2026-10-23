@@ -26,6 +26,9 @@ import { db } from '../lib/firebase';
 import { CATEGORIES } from '../constants';
 import { formatRelativeTime, formatViewCount } from '../utils/dateUtils';
 import { ThemeToggle } from './ThemeToggle';
+import { Download, Zap, HardDrive } from 'lucide-react';
+import { getOfflineCatalog, removeOfflineVideo, getTotalOfflineStorageUsed, SavedOfflineVideo, formatStorageSize } from '../utils/offlineVideoStorage';
+import { getVideoQualitySetting, setVideoQualitySetting, QUALITY_OPTIONS, QualityTier } from '../utils/videoQualitySettings';
 
 interface UserProfileModalProps {
   onClose: () => void;
@@ -56,7 +59,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onVideoDeleted,
   onOpenUpload,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'uploads'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'uploads' | 'offline'>('overview');
+  const [offlineCatalog, setOfflineCatalog] = useState<SavedOfflineVideo[]>(getOfflineCatalog);
+  const [qualitySetting, setQualitySettingState] = useState<QualityTier>(getVideoQualitySetting);
+
+  const handleRemoveOfflineItem = async (videoId: string) => {
+    await removeOfflineVideo(videoId);
+    setOfflineCatalog(getOfflineCatalog());
+  };
+
+  const handleSelectQuality = (tier: QualityTier) => {
+    setVideoQualitySetting(tier);
+    setQualitySettingState(tier);
+  };
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -250,6 +265,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             >
               <Film className="w-3.5 h-3.5" />
               <span>My Uploads ({userUploadedVideos.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOfflineCatalog(getOfflineCatalog());
+                setActiveTab('offline');
+              }}
+              className={`px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'offline'
+                  ? 'bg-[#F2B705] text-[#14171A] shadow-sm'
+                  : 'text-[#9BA1A8] hover:text-[#F3F1EA] hover:bg-[#262B31]'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Offline ({offlineCatalog.length})</span>
             </button>
           </div>
 
@@ -662,6 +693,128 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'offline' && (
+            <div className="space-y-4">
+              {/* Bandwidth & Quality Preference Card */}
+              <div className="bg-[#1D2126] border border-[#333A41] rounded-[16px] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-[#F2B705]" />
+                    <h4 className="text-[14px] font-bold text-[#F3F1EA]">Low-Data / Bandwidth Setting</h4>
+                  </div>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#F2B705]/15 text-[#F2B705] font-bold">
+                    {qualitySetting === '360p' ? 'Low Data Active' : qualitySetting.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-[12px] text-[#9BA1A8] leading-relaxed">
+                  Reduce mobile data consumption on cellular networks across Uganda by selecting your preferred streaming quality tier.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {QUALITY_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleSelectQuality(opt.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        qualitySetting === opt.id
+                          ? 'bg-[#F2B705]/15 border-[#F2B705] text-[#F3F1EA]'
+                          : 'bg-[#181B1F]/60 border-[#333A41] text-[#9BA1A8] hover:bg-[#262B31]'
+                      }`}
+                    >
+                      <div className="text-[12px] font-bold text-[#F3F1EA] flex items-center justify-between">
+                        <span>{opt.label}</span>
+                        {qualitySetting === opt.id && <CheckCircle2 className="w-3.5 h-3.5 text-[#F2B705]" />}
+                      </div>
+                      <div className="text-[10px] text-[#9BA1A8] mt-0.5">{opt.dataSavings}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Saved Offline Videos Section */}
+              <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-[#21A8A3]" />
+                  <h4 className="text-[14px] font-bold text-[#F3F1EA]">Saved Offline Library</h4>
+                </div>
+                <span className="text-[12px] text-[#9BA1A8] font-mono">
+                  {getTotalOfflineStorageUsed()} used
+                </span>
+              </div>
+
+              {offlineCatalog.length === 0 ? (
+                <div className="text-center py-8 bg-[#181B1F]/40 border border-[#333A41] rounded-[16px] p-6 space-y-2">
+                  <Download className="w-8 h-8 text-[#656C73] mx-auto opacity-60" />
+                  <p className="text-[14px] font-semibold text-[#F3F1EA]">No offline videos saved yet</p>
+                  <p className="text-[12px] text-[#9BA1A8] max-w-sm mx-auto">
+                    Click the "Save Offline" button on any video player to download stories for offline viewing without using mobile data.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {offlineCatalog.map(({ video, sizeBytes }) => (
+                    <div
+                      key={video.id}
+                      className="flex items-center justify-between gap-3 bg-[#1D2126] border border-[#333A41] p-3 rounded-[14px] hover:border-[#333A41]/80 transition-colors"
+                    >
+                      <div
+                        onClick={() => {
+                          onClose();
+                          if (onSelectVideo) onSelectVideo(video);
+                        }}
+                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer group"
+                      >
+                        <div className="w-16 aspect-video rounded-lg bg-[#14171A] overflow-hidden flex-shrink-0 relative">
+                          {video.thumbnailUrl ? (
+                            <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          ) : (
+                            <div className={`w-full h-full bg-gradient-to-br ${video.thumbnailGradient}`} />
+                          )}
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Play className="w-5 h-5 text-white fill-current" />
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h5 className="text-[13px] font-bold text-[#F3F1EA] truncate group-hover:text-[#F2B705] transition-colors">
+                            {video.title}
+                          </h5>
+                          <div className="text-[11px] text-[#9BA1A8] flex items-center gap-2 mt-0.5">
+                            <span>{video.channel}</span>
+                            <span>·</span>
+                            <span className="font-mono">{formatStorageSize(sizeBytes)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            if (onSelectVideo) onSelectVideo(video);
+                          }}
+                          className="p-2 rounded-full bg-[#F2B705]/15 hover:bg-[#F2B705]/25 text-[#F2B705] text-[12px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Watch offline"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span className="hidden sm:inline">Play</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOfflineItem(video.id)}
+                          className="p-2 rounded-full hover:bg-[#E14545]/20 text-[#656C73] hover:text-[#E14545] transition-colors cursor-pointer"
+                          title="Remove from offline cache"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
